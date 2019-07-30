@@ -2745,6 +2745,39 @@ static void futex_wait_queue_me(struct futex_hash_bucket *hb, struct futex_q *q,
 	__set_current_state(TASK_RUNNING);
 }
 
+static int __futex_wait_setup(u32 __user *uaddr, u32 val, unsigned int flags,
+			      struct futex_q *q, struct futex_hash_bucket **hb)
+{
+
+	u32 uval;
+	int ret;
+
+retry_private:
+	*hb = queue_lock(q);
+
+	ret = get_futex_value_locked(&uval, uaddr);
+
+	if (ret) {
+		queue_unlock(*hb);
+
+		ret = get_user(uval, uaddr);
+		if (ret)
+			return ret;
+
+		if (!(flags & FLAGS_SHARED))
+			goto retry_private;
+
+		return 1;
+	}
+
+	if (uval != val) {
+		queue_unlock(*hb);
+		ret = -EWOULDBLOCK;
+	}
+
+	return ret;
+}
+
 /**
  * futex_wait_setup() - Prepare to wait on a futex
  * @uaddr:	the futex userspace address
@@ -2765,7 +2798,6 @@ static void futex_wait_queue_me(struct futex_hash_bucket *hb, struct futex_q *q,
 static int futex_wait_setup(u32 __user *uaddr, u32 val, unsigned int flags,
 			   struct futex_q *q, struct futex_hash_bucket **hb)
 {
-	u32 uval;
 	int ret;
 
 	/*
@@ -2786,38 +2818,19 @@ static int futex_wait_setup(u32 __user *uaddr, u32 val, unsigned int flags,
 	 * absorb a wakeup if *uaddr does not match the desired values
 	 * while the syscall executes.
 	 */
-retry:
-	ret = get_futex_key(uaddr, flags & FLAGS_SHARED, &q->key, FUTEX_READ);
-	if (unlikely(ret != 0))
-		return ret;
+	do {
+		ret = get_futex_key(uaddr, flags & FLAGS_SHARED,
+				    &q->key, FUTEX_READ);
+		if (unlikely(ret != 0))
+			return ret;
 
-retry_private:
-	*hb = queue_lock(q);
+		ret = __futex_wait_setup(uaddr, val, flags, q, hb);
 
-	ret = get_futex_value_locked(&uval, uaddr);
-
-	if (ret) {
-		queue_unlock(*hb);
-
-		ret = get_user(uval, uaddr);
+		/* Drop key reference if retry or error. */
 		if (ret)
-			goto out;
+			put_futex_key(&q->key);
+	} while (ret > 0);
 
-		if (!(flags & FLAGS_SHARED))
-			goto retry_private;
-
-		put_futex_key(&q->key);
-		goto retry;
-	}
-
-	if (uval != val) {
-		queue_unlock(*hb);
-		ret = -EWOULDBLOCK;
-	}
-
-out:
-	if (ret)
-		put_futex_key(&q->key);
 	return ret;
 }
 
