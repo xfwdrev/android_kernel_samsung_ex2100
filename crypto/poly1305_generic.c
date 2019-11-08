@@ -19,7 +19,7 @@
 #include <linux/module.h>
 #include <asm/unaligned.h>
 
-int crypto_poly1305_init(struct shash_desc *desc)
+static int crypto_poly1305_init(struct shash_desc *desc)
 {
 	struct poly1305_desc_ctx *dctx = shash_desc_ctx(desc);
 
@@ -80,7 +80,7 @@ static int crypto_poly1305_update(struct shash_desc *desc,
 	return 0;
 }
 
-int crypto_poly1305_final(struct shash_desc *desc, u8 *dst)
+static int crypto_poly1305_final(struct shash_desc *desc, u8 *dst)
 {
 	struct poly1305_desc_ctx *dctx = shash_desc_ctx(desc);
 
