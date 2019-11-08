@@ -21,6 +21,7 @@
 
 #include <crypto/algapi.h>
 #include <crypto/internal/chacha.h>
+#include <crypto/internal/simd.h>
 #include <crypto/internal/skcipher.h>
 #include <linux/jump_label.h>
 #include <linux/kernel.h>
