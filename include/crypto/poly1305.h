@@ -52,10 +52,7 @@ struct poly1305_desc_ctx {
 	/* accumulator */
 	struct poly1305_state h;
 	/* key */
-	union {
-		struct poly1305_key opaque_r[CONFIG_CRYPTO_LIB_POLY1305_RSIZE];
-		struct poly1305_core_key core_r;
-	};
+	struct poly1305_key r[1];
 };
 
 #endif

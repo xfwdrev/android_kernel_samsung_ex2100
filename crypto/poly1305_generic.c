@@ -42,7 +42,7 @@ static void poly1305_blocks(struct poly1305_desc_ctx *dctx, const u8 *src,
 		srclen = datalen;
 	}
 
-	poly1305_core_blocks(&dctx->h, &dctx->r, src,
+	poly1305_core_blocks(&dctx->h, dctx->r, src,
 			     srclen / POLY1305_BLOCK_SIZE, 1);
 }
 
@@ -91,7 +91,7 @@ int crypto_poly1305_final(struct shash_desc *desc, u8 *dst)
 		dctx->buf[dctx->buflen++] = 1;
 		memset(dctx->buf + dctx->buflen, 0,
 		       POLY1305_BLOCK_SIZE - dctx->buflen);
-		poly1305_core_blocks(&dctx->h, &dctx->r, dctx->buf, 1, 0);
+		poly1305_core_blocks(&dctx->h, dctx->r, dctx->buf, 1, 0);
 	}
 
 	poly1305_core_emit(&dctx->h, digest);
