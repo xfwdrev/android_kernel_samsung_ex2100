@@ -117,10 +117,16 @@ static int chacha_neon_stream_xor(struct skcipher_request *req,
 		if (nbytes < walk.total)
 			nbytes = rounddown(nbytes, walk.stride);
 
-		kernel_neon_begin();
-		chacha_doneon(state, walk.dst.virt.addr, walk.src.virt.addr,
-			      nbytes, ctx->nrounds);
-		kernel_neon_end();
+		if (!crypto_simd_usable()) {
+			chacha_crypt_generic(state, walk.dst.virt.addr,
+					     walk.src.virt.addr, nbytes,
+					     ctx->nrounds);
+		} else {
+			kernel_neon_begin();
+			chacha_doneon(state, walk.dst.virt.addr,
+				      walk.src.virt.addr, nbytes, ctx->nrounds);
+			kernel_neon_end();
+		}
 		err = skcipher_walk_done(&walk, walk.nbytes - nbytes);
 	}
 
@@ -144,7 +150,14 @@ static int xchacha_neon(struct skcipher_request *req)
 	u8 real_iv[16];
 
 	chacha_init_generic(state, ctx->key, req->iv);
-	hchacha_block_arch(state, subctx.key, ctx->nrounds);
+
+	if (crypto_simd_usable()) {
+		kernel_neon_begin();
+		hchacha_block_neon(state, subctx.key, ctx->nrounds);
+		kernel_neon_end();
+	} else {
+		hchacha_block_generic(state, subctx.key, ctx->nrounds);
+	}
 	subctx.nrounds = ctx->nrounds;
 
 	memcpy(&real_iv[0], req->iv + 24, 8);
