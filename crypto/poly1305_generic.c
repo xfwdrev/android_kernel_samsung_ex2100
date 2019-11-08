@@ -19,7 +19,7 @@
 #include <linux/module.h>
 #include <asm/unaligned.h>
 
-static int crypto_poly1305_init(struct shash_desc *desc)
+int crypto_poly1305_init(struct shash_desc *desc)
 {
 	struct poly1305_desc_ctx *dctx = shash_desc_ctx(desc);
 
@@ -29,29 +29,6 @@ static int crypto_poly1305_init(struct shash_desc *desc)
 	dctx->sset = false;
 
 	return 0;
-}
-
-static unsigned int crypto_poly1305_setdesckey(struct poly1305_desc_ctx *dctx,
-					       const u8 *src, unsigned int srclen)
-{
-	if (!dctx->sset) {
-		if (!dctx->rset && srclen >= POLY1305_BLOCK_SIZE) {
-			poly1305_core_setkey(&dctx->core_r, src);
-			src += POLY1305_BLOCK_SIZE;
-			srclen -= POLY1305_BLOCK_SIZE;
-			dctx->rset = 2;
-		}
-		if (srclen >= POLY1305_BLOCK_SIZE) {
-			dctx->s[0] = get_unaligned_le32(src +  0);
-			dctx->s[1] = get_unaligned_le32(src +  4);
-			dctx->s[2] = get_unaligned_le32(src +  8);
-			dctx->s[3] = get_unaligned_le32(src + 12);
-			src += POLY1305_BLOCK_SIZE;
-			srclen -= POLY1305_BLOCK_SIZE;
-			dctx->sset = true;
-		}
-	}
-	return srclen;
 }
 
 static void poly1305_blocks(struct poly1305_desc_ctx *dctx, const u8 *src,
@@ -65,7 +42,7 @@ static void poly1305_blocks(struct poly1305_desc_ctx *dctx, const u8 *src,
 		srclen = datalen;
 	}
 
-	poly1305_core_blocks(&dctx->h, &dctx->core_r, src,
+	poly1305_core_blocks(&dctx->h, &dctx->r, src,
 			     srclen / POLY1305_BLOCK_SIZE, 1);
 }
 
@@ -103,14 +80,32 @@ static int crypto_poly1305_update(struct shash_desc *desc,
 	return 0;
 }
 
-static int crypto_poly1305_final(struct shash_desc *desc, u8 *dst)
+int crypto_poly1305_final(struct shash_desc *desc, u8 *dst)
 {
 	struct poly1305_desc_ctx *dctx = shash_desc_ctx(desc);
 
 	if (unlikely(!dctx->sset))
 		return -ENOKEY;
 
-	poly1305_final_generic(dctx, dst);
+	if (unlikely(dctx->buflen)) {
+		dctx->buf[dctx->buflen++] = 1;
+		memset(dctx->buf + dctx->buflen, 0,
+		       POLY1305_BLOCK_SIZE - dctx->buflen);
+		poly1305_core_blocks(&dctx->h, &dctx->r, dctx->buf, 1, 0);
+	}
+
+	poly1305_core_emit(&dctx->h, digest);
+
+	/* mac = (h + s) % (2^128) */
+	f = (f >> 32) + le32_to_cpu(digest[0]) + dctx->s[0];
+	put_unaligned_le32(f, dst + 0);
+	f = (f >> 32) + le32_to_cpu(digest[1]) + dctx->s[1];
+	put_unaligned_le32(f, dst + 4);
+	f = (f >> 32) + le32_to_cpu(digest[2]) + dctx->s[2];
+	put_unaligned_le32(f, dst + 8);
+	f = (f >> 32) + le32_to_cpu(digest[3]) + dctx->s[3];
+	put_unaligned_le32(f, dst + 12);
+
 	return 0;
 }
 

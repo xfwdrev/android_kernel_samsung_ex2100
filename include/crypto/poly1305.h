@@ -58,42 +58,4 @@ struct poly1305_desc_ctx {
 	};
 };
 
-void poly1305_init_arch(struct poly1305_desc_ctx *desc,
-			const u8 key[POLY1305_KEY_SIZE]);
-void poly1305_init_generic(struct poly1305_desc_ctx *desc,
-			   const u8 key[POLY1305_KEY_SIZE]);
-
-static inline void poly1305_init(struct poly1305_desc_ctx *desc, const u8 *key)
-{
-	if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_POLY1305))
-		poly1305_init_arch(desc, key);
-	else
-		poly1305_init_generic(desc, key);
-}
-
-void poly1305_update_arch(struct poly1305_desc_ctx *desc, const u8 *src,
-			  unsigned int nbytes);
-void poly1305_update_generic(struct poly1305_desc_ctx *desc, const u8 *src,
-			     unsigned int nbytes);
-
-static inline void poly1305_update(struct poly1305_desc_ctx *desc,
-				   const u8 *src, unsigned int nbytes)
-{
-	if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_POLY1305))
-		poly1305_update_arch(desc, src, nbytes);
-	else
-		poly1305_update_generic(desc, src, nbytes);
-}
-
-void poly1305_final_arch(struct poly1305_desc_ctx *desc, u8 *digest);
-void poly1305_final_generic(struct poly1305_desc_ctx *desc, u8 *digest);
-
-static inline void poly1305_final(struct poly1305_desc_ctx *desc, u8 *digest)
-{
-	if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_POLY1305))
-		poly1305_final_arch(desc, digest);
-	else
-		poly1305_final_generic(desc, digest);
-}
-
 #endif
