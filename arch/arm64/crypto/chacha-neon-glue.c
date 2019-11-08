@@ -64,7 +64,7 @@ static void chacha_doneon(u32 *state, u8 *dst, const u8 *src,
 
 void hchacha_block_arch(const u32 *state, u32 *stream, int nrounds)
 {
-	if (!static_branch_likely(&have_neon) || !may_use_simd()) {
+	if (!static_branch_likely(&have_neon) || !crypto_simd_usable()) {
 		hchacha_block_generic(state, stream, nrounds);
 	} else {
 		kernel_neon_begin();
@@ -84,22 +84,15 @@ void chacha_crypt_arch(u32 *state, u8 *dst, const u8 *src, unsigned int bytes,
 		       int nrounds)
 {
 	if (!static_branch_likely(&have_neon) || bytes <= CHACHA_BLOCK_SIZE ||
-	    !may_use_simd())
+	    !crypto_simd_usable())
 		return chacha_crypt_generic(state, dst, src, bytes, nrounds);
 
-	do {
-		unsigned int todo = min_t(unsigned int, bytes, SZ_4K);
-
-		kernel_neon_begin();
-		chacha_doneon(state, dst, src, todo, nrounds);
-		kernel_neon_end();
-
-		bytes -= todo;
-		src += todo;
-		dst += todo;
-	} while (bytes);
+	kernel_neon_begin();
+	chacha_doneon(state, dst, src, bytes, nrounds);
+	kernel_neon_end();
 }
 EXPORT_SYMBOL(chacha_crypt_arch);
+
 static int chacha_neon_stream_xor(struct skcipher_request *req,
 				  const struct chacha_ctx *ctx, const u8 *iv)
 {
@@ -117,7 +110,8 @@ static int chacha_neon_stream_xor(struct skcipher_request *req,
 		if (nbytes < walk.total)
 			nbytes = rounddown(nbytes, walk.stride);
 
-		if (!crypto_simd_usable()) {
+		if (!static_branch_likely(&have_neon) ||
+		    !crypto_simd_usable()) {
 			chacha_crypt_generic(state, walk.dst.virt.addr,
 					     walk.src.virt.addr, nbytes,
 					     ctx->nrounds);
@@ -150,14 +144,7 @@ static int xchacha_neon(struct skcipher_request *req)
 	u8 real_iv[16];
 
 	chacha_init_generic(state, ctx->key, req->iv);
-
-	if (crypto_simd_usable()) {
-		kernel_neon_begin();
-		hchacha_block_neon(state, subctx.key, ctx->nrounds);
-		kernel_neon_end();
-	} else {
-		hchacha_block_generic(state, subctx.key, ctx->nrounds);
-	}
+	hchacha_block_arch(state, subctx.key, ctx->nrounds);
 	subctx.nrounds = ctx->nrounds;
 
 	memcpy(&real_iv[0], req->iv + 24, 8);
@@ -220,14 +207,17 @@ static struct skcipher_alg algs[] = {
 static int __init chacha_simd_mod_init(void)
 {
 	if (!cpu_have_named_feature(ASIMD))
-		return -ENODEV;
+		return 0;
+
+	static_branch_enable(&have_neon);
 
 	return crypto_register_skciphers(algs, ARRAY_SIZE(algs));
 }
 
 static void __exit chacha_simd_mod_fini(void)
 {
-	crypto_unregister_skciphers(algs, ARRAY_SIZE(algs));
+	if (cpu_have_named_feature(ASIMD))
+		crypto_unregister_skciphers(algs, ARRAY_SIZE(algs));
 }
 
 module_init(chacha_simd_mod_init);
