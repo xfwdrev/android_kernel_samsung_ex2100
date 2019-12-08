@@ -11,19 +11,17 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
-#include <net/ip_tunnels.h>
 
 struct wg_device;
 struct wg_peer;
 struct multicore_worker;
 struct crypt_queue;
-struct prev_queue;
 struct sk_buff;
 
 /* queueing.c APIs: */
 int wg_packet_queue_init(struct crypt_queue *queue, work_func_t function,
-			 unsigned int len);
-void wg_packet_queue_free(struct crypt_queue *queue, bool purge);
+			 bool multicore, unsigned int len);
+void wg_packet_queue_free(struct crypt_queue *queue, bool multicore);
 struct multicore_worker __percpu *
 wg_packet_percpu_multicore_worker_alloc(work_func_t function, void *ptr);
 
@@ -67,37 +65,31 @@ struct packet_cb {
 #define PACKET_CB(skb) ((struct packet_cb *)((skb)->cb))
 #define PACKET_PEER(skb) (PACKET_CB(skb)->keypair->entry.peer)
 
-static inline bool wg_check_packet_protocol(struct sk_buff *skb)
+/* Returns either the correct skb->protocol value, or 0 if invalid. */
+static inline __be16 wg_skb_examine_untrusted_ip_hdr(struct sk_buff *skb)
 {
-	__be16 real_protocol = ip_tunnel_parse_protocol(skb);
-	return real_protocol && skb->protocol == real_protocol;
+	if (skb_network_header(skb) >= skb->head &&
+	    (skb_network_header(skb) + sizeof(struct iphdr)) <=
+		    skb_tail_pointer(skb) &&
+	    ip_hdr(skb)->version == 4)
+		return htons(ETH_P_IP);
+	if (skb_network_header(skb) >= skb->head &&
+	    (skb_network_header(skb) + sizeof(struct ipv6hdr)) <=
+		    skb_tail_pointer(skb) &&
+	    ipv6_hdr(skb)->version == 6)
+		return htons(ETH_P_IPV6);
+	return 0;
 }
 
-static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
+static inline void wg_reset_packet(struct sk_buff *skb)
 {
-	u8 l4_hash = skb->l4_hash;
-	u8 sw_hash = skb->sw_hash;
-	u32 hash = skb->hash;
+	const int pfmemalloc = skb->pfmemalloc;
+
 	skb_scrub_packet(skb, true);
 	memset(&skb->headers_start, 0,
 	       offsetof(struct sk_buff, headers_end) -
 		       offsetof(struct sk_buff, headers_start));
-
-	/* ANDROID:
-	 * Due to attempts to keep the ABI stable for struct sk_buff, the new
-	 * fields were incorrectly added _AFTER_ the headers_end field, which
-	 * requires that we manually copy the fields here from the old to the
-	 * new one.
-	 * Be sure to add any new field that is added in the
-	 * ANDROID_KABI_REPLACE() macros below here as well.
-	 */
-	skb->scm_io_uring = 0;
-
-	if (encapsulating) {
-		skb->l4_hash = l4_hash;
-		skb->sw_hash = sw_hash;
-		skb->hash = hash;
-	}
+	skb->pfmemalloc = pfmemalloc;
 	skb->queue_mapping = 0;
 	skb->nohdr = 0;
 	skb->peeked = 0;
@@ -130,46 +122,26 @@ static inline int wg_cpumask_choose_online(int *stored_cpu, unsigned int id)
 	return cpu;
 }
 
-/* This function is racy, in the sense that it's called while last_cpu is
- * unlocked, so it could return the same CPU twice. Adding locking or using
- * atomic sequence numbers is slower though, and the consequences of racing are
- * harmless, so live with it.
+/* This function is racy, in the sense that next is unlocked, so it could return
+ * the same CPU twice. A race-free version of this would be to instead store an
+ * atomic sequence number, do an increment-and-return, and then iterate through
+ * every possible CPU until we get to that index -- choose_cpu. However that's
+ * a bit slower, and it doesn't seem like this potential race actually
+ * introduces any performance loss, so we live with it.
  */
-static inline int wg_cpumask_next_online(int *last_cpu)
+static inline int wg_cpumask_next_online(int *next)
 {
-	int cpu = cpumask_next(READ_ONCE(*last_cpu), cpu_online_mask);
-	if (cpu >= nr_cpu_ids)
-		cpu = cpumask_first(cpu_online_mask);
-	WRITE_ONCE(*last_cpu, cpu);
+	int cpu = *next;
+
+	while (unlikely(!cpumask_test_cpu(cpu, cpu_online_mask)))
+		cpu = cpumask_next(cpu, cpu_online_mask) % nr_cpumask_bits;
+	*next = cpumask_next(cpu, cpu_online_mask) % nr_cpumask_bits;
 	return cpu;
 }
 
-void wg_prev_queue_init(struct prev_queue *queue);
-
-/* Multi producer */
-bool wg_prev_queue_enqueue(struct prev_queue *queue, struct sk_buff *skb);
-
-/* Single consumer */
-struct sk_buff *wg_prev_queue_dequeue(struct prev_queue *queue);
-
-/* Single consumer */
-static inline struct sk_buff *wg_prev_queue_peek(struct prev_queue *queue)
-{
-	if (queue->peeked)
-		return queue->peeked;
-	queue->peeked = wg_prev_queue_dequeue(queue);
-	return queue->peeked;
-}
-
-/* Single consumer */
-static inline void wg_prev_queue_drop_peeked(struct prev_queue *queue)
-{
-	queue->peeked = NULL;
-}
-
 static inline int wg_queue_enqueue_per_device_and_peer(
-	struct crypt_queue *device_queue, struct prev_queue *peer_queue,
-	struct sk_buff *skb, struct workqueue_struct *wq)
+	struct crypt_queue *device_queue, struct crypt_queue *peer_queue,
+	struct sk_buff *skb, struct workqueue_struct *wq, int *next_cpu)
 {
 	int cpu;
 
@@ -177,20 +149,21 @@ static inline int wg_queue_enqueue_per_device_and_peer(
 	/* We first queue this up for the peer ingestion, but the consumer
 	 * will wait for the state to change to CRYPTED or DEAD before.
 	 */
-	if (unlikely(!wg_prev_queue_enqueue(peer_queue, skb)))
+	if (unlikely(ptr_ring_produce_bh(&peer_queue->ring, skb)))
 		return -ENOSPC;
-
 	/* Then we queue it up in the device queue, which consumes the
 	 * packet as soon as it can.
 	 */
-	cpu = wg_cpumask_next_online(&device_queue->last_cpu);
+	cpu = wg_cpumask_next_online(next_cpu);
 	if (unlikely(ptr_ring_produce_bh(&device_queue->ring, skb)))
 		return -EPIPE;
 	queue_work_on(cpu, wq, &per_cpu_ptr(device_queue->worker, cpu)->work);
 	return 0;
 }
 
-static inline void wg_queue_enqueue_per_peer_tx(struct sk_buff *skb, enum packet_state state)
+static inline void wg_queue_enqueue_per_peer(struct crypt_queue *queue,
+					     struct sk_buff *skb,
+					     enum packet_state state)
 {
 	/* We take a reference, because as soon as we call atomic_set, the
 	 * peer can be freed from below us.
@@ -198,12 +171,14 @@ static inline void wg_queue_enqueue_per_peer_tx(struct sk_buff *skb, enum packet
 	struct wg_peer *peer = wg_peer_get(PACKET_PEER(skb));
 
 	atomic_set_release(&PACKET_CB(skb)->state, state);
-	queue_work_on(wg_cpumask_choose_online(&peer->serial_work_cpu, peer->internal_id),
-		      peer->device->packet_crypt_wq, &peer->transmit_packet_work);
+	queue_work_on(wg_cpumask_choose_online(&peer->serial_work_cpu,
+					       peer->internal_id),
+		      peer->device->packet_crypt_wq, &queue->work);
 	wg_peer_put(peer);
 }
 
-static inline void wg_queue_enqueue_per_peer_rx(struct sk_buff *skb, enum packet_state state)
+static inline void wg_queue_enqueue_per_peer_napi(struct sk_buff *skb,
+						  enum packet_state state)
 {
 	/* We take a reference, because as soon as we call atomic_set, the
 	 * peer can be freed from below us.
