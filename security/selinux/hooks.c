@@ -113,7 +113,7 @@ static DEFINE_MUTEX(selinux_sdcardfs_lock);
 // ] SEC_SELINUX_PORTING_COMMON
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-static int selinux_enforcing_boot;
+static int selinux_enforcing_boot __initdata;
 int selinux_enforcing;
 
 static int __init enforcing_setup(char *str)
@@ -137,7 +137,7 @@ __setup("enforcing=", enforcing_setup);
 #define selinux_enforcing_boot 1
 #endif
 
-int selinux_enabled __lsm_ro_after_init = 1;
+int selinux_enabled_boot __initdata = 1;
 #ifdef CONFIG_SECURITY_SELINUX_BOOTPARAM
 static int __init selinux_enabled_setup(char *str)
 {
@@ -148,7 +148,7 @@ static int __init selinux_enabled_setup(char *str)
 #ifdef CONFIG_ALWAYS_ENFORCE
 		selinux_enabled = 1;
 #else
-		selinux_enabled = enabled ? 1 : 0;
+		selinux_enabled_boot = enabled ? 1 : 0;
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	return 1;
@@ -7304,7 +7304,7 @@ void selinux_complete_init(void)
 DEFINE_LSM(selinux) = {
 	.name = "selinux",
 	.flags = LSM_FLAG_LEGACY_MAJOR | LSM_FLAG_EXCLUSIVE,
-	.enabled = &selinux_enabled,
+	.enabled = &selinux_enabled_boot,
 	.blobs = &selinux_blob_sizes,
 	.init = selinux_init,
 };
@@ -7377,7 +7377,7 @@ static int __init selinux_nf_ip_init(void)
 	selinux_enabled = 1;
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
-	if (!selinux_enabled)
+	if (!selinux_enabled_boot)
 		return 0;
 
 	pr_debug("SELinux:  Registering netfilter hooks\n");
@@ -7423,8 +7423,6 @@ int selinux_disable(struct selinux_state *state)
 	selinux_mark_disabled(state);
 
 	pr_info("SELinux:  Disabled at runtime.\n");
-
-	selinux_enabled = 0;
 
 	security_delete_hooks(selinux_hooks, ARRAY_SIZE(selinux_hooks));
 
