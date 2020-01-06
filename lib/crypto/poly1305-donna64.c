@@ -12,8 +12,7 @@
 
 typedef __uint128_t u128;
 
-void poly1305_core_setkey(struct poly1305_core_key *key,
-			  const u8 raw_key[POLY1305_BLOCK_SIZE])
+void poly1305_core_setkey(struct poly1305_core_key *key, const u8 raw_key[16])
 {
 	u64 t0, t1;
 
