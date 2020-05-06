@@ -260,7 +260,7 @@ retry:
 static void fuse_force_forget(struct file *file, u64 nodeid)
 {
 	struct inode *inode = file_inode(file);
-	struct fuse_conn *fc = get_fuse_conn(inode);
+	struct fuse_mount *fm = get_fuse_mount(inode);
 	struct fuse_forget_in inarg;
 	FUSE_ARGS(args);
 
@@ -274,7 +274,7 @@ static void fuse_force_forget(struct file *file, u64 nodeid)
 	args.force = true;
 	args.noreply = true;
 
-	fuse_simple_request(fc, &args);
+	fuse_simple_request(fm, &args);
 	/* ignore errors */
 }
 
@@ -330,7 +330,7 @@ static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 	size_t bufsize = 32768;
 	void *buf;
 	struct inode *inode = file_inode(file);
-	struct fuse_conn *fc = get_fuse_conn(inode);
+	struct fuse_mount *fm = get_fuse_mount(inode);
 	struct fuse_io_args ia = {};
 	struct fuse_args_pages *ap = &ia.ap;
 	u64 attr_version = 0;
@@ -350,15 +350,15 @@ static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 	ap->pages = &page;
 	ap->descs = &desc;
 	if (plus) {
-		attr_version = fuse_get_attr_version(fc);
-		fuse_read_args_fill(&ia, file, ctx->pos, bufsize,
+		attr_version = fuse_get_attr_version(fm->fc);
+		fuse_read_args_fill(&ia, file, ctx->pos, PAGE_SIZE,
 				    FUSE_READDIRPLUS);
 	} else {
 		fuse_read_args_fill(&ia, file, ctx->pos, bufsize,
 				    FUSE_READDIR);
 	}
 	locked = fuse_lock_inode(inode);
-	res = fuse_simple_request(fc, &ap->args);
+	res = fuse_simple_request(fm, &ap->args);
 	fuse_unlock_inode(inode, locked);
 	if (res >= 0) {
 		if (!res) {
