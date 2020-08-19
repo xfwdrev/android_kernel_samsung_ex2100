@@ -1197,6 +1197,7 @@ bool fuse_dax_inode_alloc(struct super_block *sb, struct fuse_inode *fi);
 void fuse_dax_inode_init(struct inode *inode);
 void fuse_dax_inode_cleanup(struct inode *inode);
 bool fuse_dax_check_alignment(struct fuse_conn *fc, unsigned int map_alignment);
+void fuse_dax_cancel_work(struct fuse_conn *fc);
 
 /* passthrough.c */
 int fuse_passthrough_open(struct fuse_dev *fud, u32 lower_fd);
