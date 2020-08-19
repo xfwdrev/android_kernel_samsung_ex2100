@@ -43,3 +43,16 @@ config FUSE_SUPPORT_STLOG
 	bool "Enable storage log"
 	default y
 	depends on FUSE_FS && PROC_STLOG
+
+config FUSE_DAX
+	bool "Virtio Filesystem Direct Host Memory Access support"
+	default y
+	depends on VIRTIO_FS
+	depends on FS_DAX
+	depends on DAX_DRIVER
+	help
+	  This allows bypassing guest page cache and allows mapping host page
+	  cache directly in guest address space.
+
+	  If you want to allow mounting a Virtio Filesystem with the "dax"
+	  option, answer Y.
