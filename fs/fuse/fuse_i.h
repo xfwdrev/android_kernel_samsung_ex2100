@@ -517,7 +517,7 @@ struct fuse_fs_context {
 	bool destroy:1;
 	bool no_control:1;
 	bool no_force_umount:1;
-	bool no_mount_options:1;
+	bool legacy_opts_show:1;
 	unsigned int max_read;
 	unsigned int blksize;
 	const char *subtype;
@@ -645,6 +645,9 @@ struct fuse_conn {
 	/** cache READLINK responses in page cache */
 	unsigned cache_symlinks:1;
 
+	/* show legacy mount options */
+	unsigned int legacy_opts_show:1;
+
 	/*
 	 * The following bitfields are only for optimization purposes
 	 * and hence races in setting them will not cause malfunction
@@ -751,9 +754,6 @@ struct fuse_conn {
 
 	/** Do not allow MNT_FORCE umount */
 	unsigned int no_force_umount:1;
-
-	/* Do not show mount options */
-	unsigned int no_mount_options:1;
 
 	/** Passthrough mode for read/write IO */
 	unsigned int passthrough:1;
