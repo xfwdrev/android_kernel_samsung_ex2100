@@ -1056,6 +1056,12 @@ out:
 }
 
 #ifdef CONFIG_SECCOMP_FILTER
+static void seccomp_notify_free(struct seccomp_filter *filter)
+{
+	kfree(filter->notif);
+	filter->notif = NULL;
+}
+
 static void seccomp_notify_detach(struct seccomp_filter *filter)
 {
 	struct seccomp_knotif *knotif;
@@ -1080,8 +1086,7 @@ static void seccomp_notify_detach(struct seccomp_filter *filter)
 		complete(&knotif->ready);
 	}
 
-	kfree(filter->notif);
-	filter->notif = NULL;
+	seccomp_notify_free(filter);
 	mutex_unlock(&filter->notify_lock);
 }
 
@@ -1326,7 +1331,7 @@ static struct file *init_listener(struct seccomp_filter *filter)
 
 out_notif:
 	if (IS_ERR(ret))
-		kfree(filter->notif);
+		seccomp_notify_free(filter);
 out:
 	return ret;
 }
