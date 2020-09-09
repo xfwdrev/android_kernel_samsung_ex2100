@@ -167,7 +167,6 @@ bool wg_index_hashtable_replace(struct index_hashtable *table,
 				struct index_hashtable_entry *old,
 				struct index_hashtable_entry *new)
 {
-<<<<<<< HEAD
 	bool ret;
 
 	spin_lock_bh(&table->lock);
@@ -175,11 +174,6 @@ bool wg_index_hashtable_replace(struct index_hashtable *table,
 	if (unlikely(!ret))
 		goto out;
 
-=======
-	if (unlikely(hlist_unhashed(&old->index_hash)))
-		return false;
-	spin_lock_bh(&table->lock);
->>>>>>> 472f7ff3147f (UPSTREAM: net: WireGuard secure network tunnel)
 	new->index = old->index;
 	hlist_replace_rcu(&old->index_hash, &new->index_hash);
 
@@ -190,14 +184,9 @@ bool wg_index_hashtable_replace(struct index_hashtable *table,
 	 * simply gets dropped, which isn't terrible.
 	 */
 	INIT_HLIST_NODE(&old->index_hash);
-<<<<<<< HEAD
 out:
 	spin_unlock_bh(&table->lock);
 	return ret;
-=======
-	spin_unlock_bh(&table->lock);
-	return true;
->>>>>>> 472f7ff3147f (UPSTREAM: net: WireGuard secure network tunnel)
 }
 
 void wg_index_hashtable_remove(struct index_hashtable *table,
