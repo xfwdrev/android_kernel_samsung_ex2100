@@ -1281,11 +1281,12 @@ void tcp_get_available_congestion_control(char *buf, size_t len);
 void tcp_get_allowed_congestion_control(char *buf, size_t len);
 int tcp_set_allowed_congestion_control(char *allowed);
 int tcp_set_congestion_control(struct sock *sk, const char *name, bool load,
-			       bool reinit, bool cap_net_admin);
+			    bool cap_net_admin);
 #ifdef CONFIG_MPTCP
 int __tcp_set_congestion_control(struct sock *sk, const char *name, bool load,
 				 bool reinit, bool cap_net_admin);
 #endif
+
 u32 tcp_slow_start(struct tcp_sock *tp, u32 acked);
 void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w, u32 acked);
 
