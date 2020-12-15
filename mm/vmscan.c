@@ -2053,13 +2053,21 @@ static unsigned noinline_for_stack move_pages_to_lru(struct lruvec *lruvec,
 			spin_lock_irq(&pgdat->lru_lock);
 			continue;
 		}
-		lruvec = mem_cgroup_page_lruvec(page, pgdat);
 
+		/*
+		 * The SetPageLRU needs to be kept here for list integrity.
+		 * Otherwise:
+		 *   #0 move_pages_to_lru             #1 release_pages
+		 *   if !put_page_testzero
+		 *				      if (put_page_testzero())
+		 *				        !PageLRU //skip lru_lock
+		 *     SetPageLRU()
+		 *     list_add(&page->lru,)
+		 *                                        list_add(&page->lru,)
+		 */
 		SetPageLRU(page);
-		add_page_to_lru_list(page, lruvec);
 
-		if (put_page_testzero(page)) {
-			del_page_from_lru_list(page, lruvec);
+		if (unlikely(put_page_testzero(page))) {
 			__clear_page_lru_flags(page);
 
 			if (unlikely(PageCompound(page))) {
@@ -2068,10 +2076,18 @@ static unsigned noinline_for_stack move_pages_to_lru(struct lruvec *lruvec,
 				spin_lock_irq(&pgdat->lru_lock);
 			} else
 				list_add(&page->lru, &pages_to_free);
-		} else {
-			nr_pages = hpage_nr_pages(page);
-			nr_moved += nr_pages;
+
+			continue;
 		}
+
+		lruvec = mem_cgroup_page_lruvec(page, pgdat);
+		lru = page_lru(page);
+		nr_pages = hpage_nr_pages(page);
+		add_page_to_lru_list(page, lruvec);
+		trace_android_vh_add_page_to_lrulist(page, false, lru);
+		nr_moved += nr_pages;
+		if (PageActive(page))
+			workingset_age_nonresident(lruvec, nr_pages);
 	}
 
 	/*
