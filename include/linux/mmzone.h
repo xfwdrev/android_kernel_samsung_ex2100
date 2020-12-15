@@ -522,6 +522,8 @@ static inline void lru_gen_exit_memcg(struct mem_cgroup *memcg)
 
 struct lruvec {
 	struct list_head		lists[NR_LRU_LISTS];
+	/* per-lruvec LRU lock for memcg-aware reclaim */
+	spinlock_t			lru_lock;
 	struct zone_reclaim_stat	reclaim_stat;
 	/* Evictions & activations on the inactive file list */
 	atomic_long_t			inactive_age;
@@ -999,7 +1001,6 @@ typedef struct pglist_data {
 
 	/* Write-intensive fields used by page reclaim */
 	ZONE_PADDING(_pad1_)
-	spinlock_t		lru_lock;
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 	/*
