@@ -14,17 +14,36 @@
 #include <linux/module.h>
 #include <asm/simd.h>
 
-struct poly1305_simd_desc_ctx {
-	struct poly1305_desc_ctx base;
-	/* derived key u set? */
-	bool uset;
-#ifdef CONFIG_AS_AVX2
-	/* derived keys r^3, r^4 set? */
-	bool wset;
-#endif
-	/* derived Poly1305 key r^2 */
-	u32 u[5];
-	/* ... silently appended r^3 and r^4 when using AVX2 */
+asmlinkage void poly1305_init_x86_64(void *ctx,
+				     const u8 key[POLY1305_BLOCK_SIZE]);
+asmlinkage void poly1305_blocks_x86_64(void *ctx, const u8 *inp,
+				       const size_t len, const u32 padbit);
+asmlinkage void poly1305_emit_x86_64(void *ctx, u8 mac[POLY1305_DIGEST_SIZE],
+				     const u32 nonce[4]);
+asmlinkage void poly1305_emit_avx(void *ctx, u8 mac[POLY1305_DIGEST_SIZE],
+				  const u32 nonce[4]);
+asmlinkage void poly1305_blocks_avx(void *ctx, const u8 *inp, const size_t len,
+				    const u32 padbit);
+asmlinkage void poly1305_blocks_avx2(void *ctx, const u8 *inp, const size_t len,
+				     const u32 padbit);
+asmlinkage void poly1305_blocks_avx512(void *ctx, const u8 *inp,
+				       const size_t len, const u32 padbit);
+
+static __ro_after_init DEFINE_STATIC_KEY_FALSE(poly1305_use_avx);
+static __ro_after_init DEFINE_STATIC_KEY_FALSE(poly1305_use_avx2);
+static __ro_after_init DEFINE_STATIC_KEY_FALSE(poly1305_use_avx512);
+
+struct poly1305_arch_internal {
+	union {
+		struct {
+			u32 h[5];
+			u32 is_base2_26;
+		};
+		u64 hs[3];
+	};
+	u64 r[2];
+	u64 pad;
+	struct { u32 r2, r1, r4, r3; } rn[9];
 };
 
 asmlinkage void poly1305_block_sse2(u32 *h, const u8 *src,
@@ -49,7 +68,7 @@ static int poly1305_simd_init(struct shash_desc *desc)
 	return crypto_poly1305_init(desc);
 }
 
-static void poly1305_simd_mult(u32 *a, const u32 *b)
+static void poly1305_simd_init(void *ctx, const u8 key[POLY1305_BLOCK_SIZE])
 {
 	u8 m[POLY1305_BLOCK_SIZE];
 
@@ -69,6 +88,56 @@ static unsigned int poly1305_simd_blocks(struct poly1305_desc_ctx *dctx,
 	BUILD_BUG_ON(offsetof(struct poly1305_simd_desc_ctx, base));
 	sctx = container_of(dctx, struct poly1305_simd_desc_ctx, base);
 
+	if (!IS_ENABLED(CONFIG_AS_AVX) || !static_branch_likely(&poly1305_use_avx) ||
+	    (len < (POLY1305_BLOCK_SIZE * 18) && !state->is_base2_26) ||
+	    !crypto_simd_usable()) {
+		convert_to_base2_64(ctx);
+		poly1305_blocks_x86_64(ctx, inp, len, padbit);
+		return;
+	}
+
+	do {
+		const size_t bytes = min_t(size_t, len, SZ_4K);
+
+		kernel_fpu_begin();
+		if (IS_ENABLED(CONFIG_AS_AVX512) && static_branch_likely(&poly1305_use_avx512))
+			poly1305_blocks_avx512(ctx, inp, bytes, padbit);
+		else if (IS_ENABLED(CONFIG_AS_AVX2) && static_branch_likely(&poly1305_use_avx2))
+			poly1305_blocks_avx2(ctx, inp, bytes, padbit);
+		else
+			poly1305_blocks_avx(ctx, inp, bytes, padbit);
+		kernel_fpu_end();
+
+		len -= bytes;
+		inp += bytes;
+	} while (len);
+}
+
+static void poly1305_simd_emit(void *ctx, u8 mac[POLY1305_DIGEST_SIZE],
+			       const u32 nonce[4])
+{
+	if (!IS_ENABLED(CONFIG_AS_AVX) || !static_branch_likely(&poly1305_use_avx))
+		poly1305_emit_x86_64(ctx, mac, nonce);
+	else
+		poly1305_emit_avx(ctx, mac, nonce);
+}
+
+void poly1305_init_arch(struct poly1305_desc_ctx *dctx, const u8 key[POLY1305_KEY_SIZE])
+{
+	poly1305_simd_init(&dctx->h, key);
+	dctx->s[0] = get_unaligned_le32(&key[16]);
+	dctx->s[1] = get_unaligned_le32(&key[20]);
+	dctx->s[2] = get_unaligned_le32(&key[24]);
+	dctx->s[3] = get_unaligned_le32(&key[28]);
+	dctx->buflen = 0;
+	dctx->sset = true;
+}
+EXPORT_SYMBOL(poly1305_init_arch);
+
+static unsigned int crypto_poly1305_setdctxkey(struct poly1305_desc_ctx *dctx,
+					       const u8 *inp, unsigned int len)
+{
+	unsigned int acc = 0;
 	if (unlikely(!dctx->sset)) {
 		datalen = crypto_poly1305_setdesckey(dctx, src, srclen);
 		src += srclen - datalen;
