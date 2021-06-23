@@ -124,6 +124,7 @@
 #define SO_SET_DNS_UID			1001
 #define SO_SET_DNS_PID			1002
 // SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
+#define SO_NETNS_COOKIE		71
 
 #if !defined(__KERNEL__)
 
