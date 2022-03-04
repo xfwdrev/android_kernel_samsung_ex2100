@@ -867,8 +867,6 @@ struct fuse_conn {
 		/* Request timeout (in jiffies). 0 = no timeout */
 		unsigned int req_timeout;
 	} timeout;
-	/** task_struct for fd lookups in fuse-bpf */
-	struct task_struct *task;
 };
 
 /*
@@ -1377,8 +1375,7 @@ static inline void fuse_freezer_count(void) {}
 })
 /* backing.c */
 
-struct file *fuse_fget(struct fuse_conn *fc, unsigned int fd);
-struct bpf_prog *fuse_get_bpf_prog(struct fuse_conn *fc, unsigned int fd);
+struct bpf_prog *fuse_get_bpf_prog(struct file *file);
 
 /*
  * Dummy io passed to fuse_bpf_backing when io operation needs no scratch space
