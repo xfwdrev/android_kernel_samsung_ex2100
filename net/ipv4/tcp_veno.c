@@ -146,11 +146,11 @@ static void tcp_veno_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 
 		rtt = veno->minrtt;
 
-		target_cwnd = (u64)tp->snd_cwnd * veno->basertt;
+		target_cwnd = (u64)tcp_snd_cwnd(tp) * veno->basertt;
 		target_cwnd <<= V_PARAM_SHIFT;
 		do_div(target_cwnd, rtt);
 
-		veno->diff = (tp->snd_cwnd << V_PARAM_SHIFT) - target_cwnd;
+		veno->diff = (tcp_snd_cwnd(tp) << V_PARAM_SHIFT) - target_cwnd;
 
 		if (tcp_in_slow_start(tp)) {
 			/* Slow start.  */
@@ -168,8 +168,8 @@ static void tcp_veno_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 				 */
 				if (tp->snd_cwnd_cnt >= tp->snd_cwnd) {
 					if (veno->inc &&
-					    tp->snd_cwnd < tp->snd_cwnd_clamp) {
-						tp->snd_cwnd++;
+					    tcp_snd_cwnd(tp) < tp->snd_cwnd_clamp) {
+						tcp_snd_cwnd_set(tp, tcp_snd_cwnd(tp) + 1);
 						veno->inc = 0;
 					} else
 						veno->inc = 1;
@@ -178,10 +178,10 @@ static void tcp_veno_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 					tp->snd_cwnd_cnt++;
 			}
 		}
-		if (tp->snd_cwnd < 2)
-			tp->snd_cwnd = 2;
-		else if (tp->snd_cwnd > tp->snd_cwnd_clamp)
-			tp->snd_cwnd = tp->snd_cwnd_clamp;
+		if (tcp_snd_cwnd(tp) < 2)
+			tcp_snd_cwnd_set(tp, 2);
+		else if (tcp_snd_cwnd(tp) > tp->snd_cwnd_clamp)
+			tcp_snd_cwnd_set(tp, tp->snd_cwnd_clamp);
 	}
 	/* Wipe the slate clean for the next rtt. */
 	/* veno->cntrtt = 0; */
@@ -196,10 +196,10 @@ static u32 tcp_veno_ssthresh(struct sock *sk)
 
 	if (veno->diff < beta)
 		/* in "non-congestive state", cut cwnd by 1/5 */
-		return max(tp->snd_cwnd * 4 / 5, 2U);
+		return max(tcp_snd_cwnd(tp) * 4 / 5, 2U);
 	else
 		/* in "congestive state", cut cwnd by 1/2 */
-		return max(tp->snd_cwnd >> 1U, 2U);
+		return max(tcp_snd_cwnd(tp) >> 1U, 2U);
 }
 
 static struct tcp_congestion_ops tcp_veno __read_mostly = {
