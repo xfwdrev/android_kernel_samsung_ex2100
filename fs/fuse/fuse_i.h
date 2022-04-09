@@ -1076,7 +1076,7 @@ int fuse_dev_init(void);
 void fuse_dev_cleanup(void);
 
 int fuse_ctl_init(void);
-void __exit fuse_ctl_cleanup(void);
+void fuse_ctl_cleanup(void);
 
 /**
  * Simple request sending that does request allocation and freeing
@@ -1847,6 +1847,9 @@ struct fuse_err_ret {
 	void *result;
 	bool ret;
 };
+
+int __init fuse_bpf_init(void);
+void __exit fuse_bpf_cleanup(void);
 
 /*
  * expression statement to wrap the backing filter logic
