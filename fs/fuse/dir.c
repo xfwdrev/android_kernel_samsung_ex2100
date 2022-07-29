@@ -261,6 +261,7 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 
 		parent = dget_parent(entry);
 
+#ifdef CONFIG_FUSE_BPF
 		/* TODO: Once we're handling timeouts for backing inodes, do a
 		 * bpf based lookup_revalidate here.
 		 */
@@ -269,7 +270,7 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			ret = 1;
 			goto out;
 		}
-
+#endif
 		forget = fuse_alloc_forget();
 		ret = -ENOMEM;
 		if (!forget) {
