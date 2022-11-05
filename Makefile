@@ -950,6 +950,7 @@ LD_FLAGS_LTO_CLANG += -mllvm -import-instr-limit=80
 else
 CC_FLAGS_LTO_CLANG := -flto
 endif
+KBUILD_CFLAGS	+= -mllvm -unroll-threshold=600
 CC_FLAGS_LTO_CLANG += -fvisibility=default
 
 ifndef CONFIG_THINLTO
