@@ -1674,7 +1674,7 @@ static int sk_getsockopt(struct sock *sk, int level, int optname,
 		lv = sizeof(u64);
 		if (len != lv)
 			return -EINVAL;
-		v.val64 = sock_net(sk)->net_cookie;
+		v.val64 = atomic64_read(&sock_net(sk)->net_cookie);
 		break;
 
 	default:
