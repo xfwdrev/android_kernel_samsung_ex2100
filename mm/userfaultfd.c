@@ -724,3 +724,233 @@ ssize_t mcopy_continue(struct mm_struct *dst_mm, unsigned long start,
 	return __mcopy_atomic(dst_mm, start, 0, len, MCOPY_ATOMIC_CONTINUE,
 			      mmap_changing, 0);
 }
+
+static inline void uffd_double_pt_lock(spinlock_t *ptl1, spinlock_t *ptl2)
+{
+	if (ptl1 > ptl2) {
+		spinlock_t *tmp = ptl1;
+
+		ptl1 = ptl2;
+		ptl2 = tmp;
+	}
+	spin_lock(ptl1);
+	if (ptl1 != ptl2)
+		spin_lock_nested(ptl2, SINGLE_DEPTH_NESTING);
+	else
+		__acquire(ptl2);
+}
+
+static inline void uffd_double_pt_unlock(spinlock_t *ptl1, spinlock_t *ptl2)
+{
+	spin_unlock(ptl1);
+	if (ptl1 != ptl2)
+		spin_unlock(ptl2);
+	else
+		__release(ptl2);
+}
+
+static inline bool vma_move_compatible(struct vm_area_struct *vma)
+{
+	return !(vma->vm_flags & (VM_PFNMAP | VM_IO | VM_HUGETLB | VM_MIXEDMAP));
+}
+
+static int validate_move_areas(struct userfaultfd_ctx *ctx,
+			       struct vm_area_struct *src_vma,
+			       struct vm_area_struct *dst_vma)
+{
+	if ((src_vma->vm_flags & VM_ACCESS_FLAGS) !=
+	    (dst_vma->vm_flags & VM_ACCESS_FLAGS))
+		return -EINVAL;
+
+	if (pgprot_val(src_vma->vm_page_prot) != pgprot_val(dst_vma->vm_page_prot))
+		return -EINVAL;
+
+	if ((src_vma->vm_flags & VM_LOCKED) != (dst_vma->vm_flags & VM_LOCKED))
+		return -EINVAL;
+
+	if (!(src_vma->vm_flags & VM_WRITE))
+		return -EINVAL;
+
+	if (!vma_move_compatible(src_vma) || !vma_move_compatible(dst_vma))
+		return -EINVAL;
+
+	if (!dst_vma->vm_userfaultfd_ctx.ctx ||
+	    dst_vma->vm_userfaultfd_ctx.ctx != ctx)
+		return -EINVAL;
+
+	if (!vma_is_anonymous(src_vma) || !vma_is_anonymous(dst_vma))
+		return -EINVAL;
+
+	return 0;
+}
+
+ssize_t move_pages(struct mm_struct *mm, struct userfaultfd_ctx *ctx,
+		   unsigned long dst_start, unsigned long src_start,
+		   unsigned long len, __u64 mode, bool *mmap_changing)
+{
+	struct vm_area_struct *dst_vma, *src_vma;
+	unsigned long dst_addr, src_addr;
+	ssize_t moved = 0, err = -EINVAL;
+
+	BUG_ON(dst_start & ~PAGE_MASK);
+	BUG_ON(src_start & ~PAGE_MASK);
+	BUG_ON(len & ~PAGE_MASK);
+	BUG_ON(dst_start + len <= dst_start);
+	BUG_ON(src_start + len <= src_start);
+
+	mmap_read_lock(mm);
+
+	err = -EAGAIN;
+	if (mmap_changing && READ_ONCE(*mmap_changing))
+		goto out_unlock;
+
+	err = -ENOENT;
+	dst_vma = find_vma(mm, dst_start);
+	src_vma = find_vma(mm, src_start);
+	if (!dst_vma || !src_vma)
+		goto out_unlock;
+
+	if (dst_start < dst_vma->vm_start || dst_start + len > dst_vma->vm_end ||
+	    src_start < src_vma->vm_start || src_start + len > src_vma->vm_end)
+		goto out_unlock;
+
+	err = validate_move_areas(ctx, src_vma, dst_vma);
+	if (err)
+		goto out_unlock;
+
+	err = 0;
+	for (dst_addr = dst_start, src_addr = src_start;
+	     src_addr < src_start + len;
+	     dst_addr += PAGE_SIZE, src_addr += PAGE_SIZE) {
+		pmd_t *dst_pmd, *src_pmd;
+		pte_t *dst_pte = NULL, *src_pte = NULL;
+		spinlock_t *dst_ptl, *src_ptl;
+		pte_t orig_dst_pte, orig_src_pte, moved_pte;
+		struct page *page;
+		bool copied = false;
+
+		if (fatal_signal_pending(current)) {
+			err = -EINTR;
+			break;
+		}
+
+		dst_pmd = mm_alloc_pmd(mm, dst_addr);
+		if (unlikely(!dst_pmd)) {
+			err = -ENOMEM;
+			break;
+		}
+		if (unlikely(pmd_none(*dst_pmd)) && unlikely(__pte_alloc(mm, dst_pmd))) {
+			err = -ENOMEM;
+			break;
+		}
+		if (unlikely(pmd_trans_huge(*dst_pmd))) {
+			err = -EEXIST;
+			break;
+		}
+
+		src_pmd = mm_find_pmd(mm, src_addr);
+		if (!src_pmd || pmd_none(*src_pmd)) {
+			if (mode & UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES) {
+				moved += PAGE_SIZE;
+				continue;
+			}
+			err = -ENOENT;
+			break;
+		}
+		if (unlikely(pmd_trans_huge(*src_pmd))) {
+			err = -EBUSY;
+			break;
+		}
+
+		dst_pte = pte_offset_map(dst_pmd, dst_addr);
+		src_pte = pte_offset_map(src_pmd, src_addr);
+		if (!dst_pte || !src_pte) {
+			err = -EFAULT;
+			goto out_unmap;
+		}
+
+		dst_ptl = pte_lockptr(mm, dst_pmd);
+		src_ptl = pte_lockptr(mm, src_pmd);
+		uffd_double_pt_lock(dst_ptl, src_ptl);
+
+		orig_dst_pte = *dst_pte;
+		orig_src_pte = *src_pte;
+
+		if (!pte_none(orig_dst_pte)) {
+			err = -EEXIST;
+			goto out_unlock_pt;
+		}
+		if (pte_none(orig_src_pte)) {
+			if (mode & UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES) {
+				copied = true;
+				goto out_unlock_pt;
+			}
+			err = -ENOENT;
+			goto out_unlock_pt;
+		}
+		if (!pte_present(orig_src_pte)) {
+			err = -EBUSY;
+			goto out_unlock_pt;
+		}
+
+		if (is_zero_pfn(pte_pfn(orig_src_pte))) {
+			pte_t zero_pte;
+
+			ptep_clear_flush(src_vma, src_addr, src_pte);
+			zero_pte = pte_mkspecial(pfn_pte(my_zero_pfn(dst_addr),
+							 dst_vma->vm_page_prot));
+			set_pte_at(mm, dst_addr, dst_pte, zero_pte);
+			update_mmu_cache(dst_vma, dst_addr, dst_pte);
+			copied = true;
+			goto out_unlock_pt;
+		}
+
+		page = vm_normal_page(src_vma, src_addr, orig_src_pte);
+		if (!page || !PageAnon(page) || page_mapcount(page) != 1) {
+			err = -EBUSY;
+			goto out_unlock_pt;
+		}
+		if (!trylock_page(page)) {
+			err = -EAGAIN;
+			goto out_unlock_pt;
+		}
+		if (!pte_same(orig_src_pte, *src_pte) ||
+		    !pte_same(orig_dst_pte, *dst_pte)) {
+			unlock_page(page);
+			err = -EAGAIN;
+			goto out_unlock_pt;
+		}
+
+		moved_pte = ptep_get_and_clear(mm, src_addr, src_pte);
+		page_move_anon_rmap(page, dst_vma);
+		page->index = linear_page_index(dst_vma, dst_addr);
+		set_pte_at(mm, dst_addr, dst_pte, moved_pte);
+		update_mmu_cache(dst_vma, dst_addr, dst_pte);
+		unlock_page(page);
+		copied = true;
+
+out_unlock_pt:
+		uffd_double_pt_unlock(dst_ptl, src_ptl);
+out_unmap:
+		if (src_pte)
+			pte_unmap(src_pte);
+		if (dst_pte)
+			pte_unmap(dst_pte);
+
+		if (copied) {
+			moved += PAGE_SIZE;
+			continue;
+		}
+
+		if (!err)
+			err = -EFAULT;
+		break;
+	}
+
+	if (moved)
+		flush_tlb_range(src_vma, src_start, src_start + moved);
+
+out_unlock:
+	mmap_read_unlock(mm);
+	return moved ? moved : err;
+}

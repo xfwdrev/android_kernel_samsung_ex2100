@@ -1898,6 +1898,66 @@ static inline unsigned int uffd_ctx_features(__u64 user_features)
 	return (unsigned int)user_features | UFFD_FEATURE_INITIALIZED;
 }
 
+static int userfaultfd_move(struct userfaultfd_ctx *ctx, unsigned long arg)
+{
+	__s64 ret;
+	struct uffdio_move uffdio_move;
+	struct uffdio_move __user *user_uffdio_move;
+	struct userfaultfd_wake_range range;
+
+	user_uffdio_move = (struct uffdio_move __user *)arg;
+
+	ret = -EAGAIN;
+	if (READ_ONCE(ctx->mmap_changing))
+		goto out;
+
+	ret = -EFAULT;
+	if (copy_from_user(&uffdio_move, user_uffdio_move,
+			   sizeof(uffdio_move) - sizeof(__s64)))
+		goto out;
+
+	/* Do not allow cross-mm moves. */
+	if (ctx->mm != current->mm)
+		return -EINVAL;
+
+	ret = validate_range(ctx->mm, uffdio_move.dst, uffdio_move.len);
+	if (ret)
+		goto out;
+	ret = validate_range(ctx->mm, uffdio_move.src, uffdio_move.len);
+	if (ret)
+		goto out;
+
+	ret = -EINVAL;
+	if (uffdio_move.mode & ~(UFFDIO_MOVE_MODE_ALLOW_SRC_HOLES |
+				 UFFDIO_MOVE_MODE_DONTWAKE |
+				 UFFDIO_MOVE_MODE_CONFIRM_FIXED))
+		goto out;
+
+	if (mmget_not_zero(ctx->mm)) {
+		ret = move_pages(ctx->mm, ctx, uffdio_move.dst, uffdio_move.src,
+				 uffdio_move.len, uffdio_move.mode,
+				 &ctx->mmap_changing);
+		mmput(ctx->mm);
+	} else {
+		return -ESRCH;
+	}
+
+	if (unlikely(put_user(ret, &user_uffdio_move->move)))
+		return -EFAULT;
+	if (ret < 0)
+		goto out;
+
+	BUG_ON(!ret);
+	range.len = ret;
+	if (!(uffdio_move.mode & UFFDIO_MOVE_MODE_DONTWAKE)) {
+		range.start = uffdio_move.dst;
+		wake_userfault(ctx, &range);
+	}
+	ret = range.len == uffdio_move.len ? 0 : -EAGAIN;
+out:
+	return ret;
+}
+
 /*
  * userland asks for a certain API version and we return which bits
  * and ioctl commands are implemented in this kernel for such API
@@ -1979,6 +2039,9 @@ static long userfaultfd_ioctl(struct file *file, unsigned cmd,
 		break;
 	case UFFDIO_CONTINUE:
 		ret = userfaultfd_continue(ctx, arg);
+		break;
+	case UFFDIO_MOVE:
+		ret = userfaultfd_move(ctx, arg);
 		break;
 	}
 	return ret;
