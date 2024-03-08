@@ -652,7 +652,15 @@ retry:
 		if (unlikely(err == -ENOENT)) {
 			void *page_kaddr;
 
-			up_read(&dst_mm->mmap_sem);
+			/*
+			 * Return early due to mmap_lock contention only after
+			 * some pages are copied to avoid retrying without making
+			 * progress on critical pages.
+			 */
+			if (copied && mmap_lock_is_contended(dst_mm))
+				break;
+
+			mmap_read_unlock(dst_mm);
 			BUG_ON(!page);
 
 			page_kaddr = kmap(page);
@@ -676,6 +684,9 @@ retry:
 
 			if (fatal_signal_pending(current))
 				err = -EINTR;
+
+			if (mmap_lock_is_contended(dst_mm))
+				err = -EAGAIN;
 		}
 		if (err)
 			break;
