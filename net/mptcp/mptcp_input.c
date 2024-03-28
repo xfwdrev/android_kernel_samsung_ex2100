@@ -89,6 +89,28 @@ static inline int mptcp_tso_acked_reinject(const struct sock *meta_sk,
 	return packets_acked;
 }
 
+/* tcp_enter_quickack_mode() should be static */
+static void tcp_incr_quickack(struct sock *sk, unsigned int max_quickacks)
+{
+	struct inet_connection_sock *icsk = inet_csk(sk);
+	unsigned int quickacks = tcp_sk(sk)->rcv_wnd / (2 * icsk->icsk_ack.rcv_mss);
+
+	if (quickacks == 0)
+		quickacks = 2;
+	quickacks = min(quickacks, max_quickacks);
+	if (quickacks > icsk->icsk_ack.quick)
+		icsk->icsk_ack.quick = quickacks;
+}
+
+static void tcp_enter_quickack_mode(struct sock *sk, unsigned int max_quickacks)
+{
+	struct inet_connection_sock *icsk = inet_csk(sk);
+
+	tcp_incr_quickack(sk, max_quickacks);
+	icsk->icsk_ack.pingpong = 0;
+	icsk->icsk_ack.ato = TCP_ATO_MIN;
+}
+
 /* Cleans the meta-socket retransmission queue and the reinject-queue. */
 static void mptcp_clean_rtx_queue(struct sock *meta_sk, u32 prior_snd_una)
 {
