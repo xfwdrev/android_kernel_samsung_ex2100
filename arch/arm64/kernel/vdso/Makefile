@@ -32,7 +32,7 @@ UBSAN_SANITIZE			:= n
 OBJECT_FILES_NON_STANDARD	:= y
 KCOV_INSTRUMENT			:= n
 
-CFLAGS_vgettimeofday.o = -O2 -mcmodel=tiny -fasynchronous-unwind-tables
+CFLAGS_vgettimeofday.o = -mcmodel=tiny -fasynchronous-unwind-tables
 
 ifneq ($(c-gettimeofday-y),)
   CFLAGS_vgettimeofday.o += -include $(c-gettimeofday-y)
@@ -44,6 +44,9 @@ ifeq ($(CONFIG_CC_IS_CLANG), y)
     CFLAGS_REMOVE_vgettimeofday.o += -mcmodel=tiny
   endif
 endif
+
+# Compile VDSO with O3 compiler optimizations
+CFLAGS_vgettimeofday.o += -O3
 
 # Disable gcov profiling for VDSO code
 GCOV_PROFILE := n
