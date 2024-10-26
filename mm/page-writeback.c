@@ -38,6 +38,7 @@
 #include <linux/sched/rt.h>
 #include <linux/sched/signal.h>
 #include <linux/mm_inline.h>
+#include <linux/binfmts.h>
 #include <trace/events/writeback.h>
 
 #include "internal.h"
@@ -527,6 +528,9 @@ int dirty_background_ratio_handler(struct ctl_table *table, int write,
 {
 	int ret;
 
+	if (task_is_booster(current))
+		return 0;
+
 	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 	if (ret == 0 && write)
 		dirty_background_bytes = 0;
@@ -538,6 +542,9 @@ int dirty_background_bytes_handler(struct ctl_table *table, int write,
 {
 	int ret;
 	unsigned long old_bytes = dirty_background_bytes;
+
+	if (task_is_booster(current))
+		return old_bytes;
 
 	ret = proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
 	if (ret == 0 && write) {
@@ -570,6 +577,9 @@ int dirty_bytes_handler(struct ctl_table *table, int write,
 {
 	unsigned long old_bytes = vm_dirty_bytes;
 	int ret;
+
+	if (task_is_booster(current))
+		return old_bytes;
 
 	ret = proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
 	if (ret == 0 && write && vm_dirty_bytes != old_bytes) {
@@ -2081,6 +2091,9 @@ int dirty_writeback_centisecs_handler(struct ctl_table *table, int write,
 {
 	unsigned int old_interval = dirty_writeback_interval;
 	int ret;
+
+	if (task_is_booster(current))
+		return old_interval;
 
 	ret = proc_dointvec(table, write, buffer, length, ppos);
 
