@@ -103,5 +103,7 @@ void tcp_plb_update_state_upon_rto(struct sock *sk, struct tcp_plb_state *plb)
 	 * congestion characteristics.
 	 */
 	plb->consec_cong_rounds = 0;
+	tcp_sk(sk)->plb_rehash++;
+	NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPPLBREHASH);
 }
 EXPORT_SYMBOL_GPL(tcp_plb_update_state_upon_rto);
