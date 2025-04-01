@@ -564,6 +564,13 @@ struct f2fs_dir_entry *__f2fs_find_entry(struct inode *dir,
 			break;
 	}
 out:
+#if IS_ENABLED(CONFIG_UNICODE)
+	if (!sb_no_casefold_compat_fallback(dir->i_sb) &&
+		IS_CASEFOLDED(dir) && !de && use_hash) {
+		use_hash = false;
+		goto start_find_entry;
+	}
+#endif
 	/* This is to increase the speed of f2fs_create */
 	if (!de)
 		F2FS_I(dir)->task = current;
