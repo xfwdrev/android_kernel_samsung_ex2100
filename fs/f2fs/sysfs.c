@@ -1149,6 +1149,16 @@ F2FS_FEATURE_RO_ATTR(compression, FEAT_COMPRESSION);
 #ifdef CONFIG_F2FS_SEC_SUPPORT_DNODE_RELOCATION
 F2FS_FEATURE_RO_ATTR(sec_dnode_relocation, FEAT_SEC_DNODE_RELOCATION);
 #endif
+F2FS_FEATURE_RO_ATTR(pin_file);
+#ifdef CONFIG_UNICODE
+F2FS_FEATURE_RO_ATTR(linear_lookup);
+#endif
+
+/* For ATGC */
+F2FS_RW_ATTR(ATGC_INFO, atgc_management, atgc_candidate_ratio, candidate_ratio);
+F2FS_RW_ATTR(ATGC_INFO, atgc_management, atgc_candidate_count, max_candidate_count);
+F2FS_RW_ATTR(ATGC_INFO, atgc_management, atgc_age_weight, age_weight);
+F2FS_RW_ATTR(ATGC_INFO, atgc_management, atgc_age_threshold, age_threshold);
 
 #define ATTR_LIST(name) (&f2fs_attr_##name.attr)
 static struct attribute *f2fs_attrs[] = {
@@ -1263,6 +1273,10 @@ static struct attribute *f2fs_feat_attrs[] = {
 #endif
 #ifdef CONFIG_F2FS_SEC_SUPPORT_DNODE_RELOCATION
 	ATTR_LIST(sec_dnode_relocation),
+#endif
+	ATTR_LIST(pin_file),
+#ifdef CONFIG_UNICODE
+	ATTR_LIST(linear_lookup),
 #endif
 	NULL,
 };
