@@ -6884,9 +6884,6 @@ CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y
 # end of Memory initialization
 # end of Kernel hardening options
 
-# CONFIG_SECURITY_DEFEX is not set
-# CONFIG_DEFEX_KERNEL_ONLY is not set
-# CONFIG_SECURITY_DEFEX_USER is not set
 # CONFIG_PROCA is not set
 # CONFIG_PROCA_GKI_10 is not set
 # CONFIG_PROCA_S_OS is not set
