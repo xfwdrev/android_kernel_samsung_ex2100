@@ -9,7 +9,7 @@ config SAMSUNG_TUI
 		Normal World and Secure World.
 
 config SAMSUNG_TUI_TEST
-	bool "Testing module for TUI HW handler"
+	tristate "Testing module for TUI HW handler"
 	default n
 	depends on SAMSUNG_TUI
 	help
