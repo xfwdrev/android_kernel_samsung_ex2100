@@ -6293,13 +6293,6 @@ CONFIG_SEC_INPUT_BOOSTER_SLSI=y
 # CONFIG_SEC_INPUT_BOOSTER_HANDLER is not set
 # CONFIG_TZIC is not set
 
-#
-# samsung Performace manager
-#
-# CONFIG_KPERFMON is not set
-
-# end of samsung Performace manager
-
 CONFIG_INPUT_SEC_INPUT=m
 CONFIG_SEC_DEBUG_TSP_LOG=m
 CONFIG_INPUT_TOUCHSCREEN_TCLMV2=m
