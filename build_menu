@@ -16,10 +16,10 @@ export LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=$PARENT_DIR/aarch64-linux-android-4
 export CLANG_PREBUILT_BIN=$PARENT_DIR/clang-r383902/bin
 export PATH=$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$PATH
 export LLVM=1
-export USE_CCACHE=1
-export CCACHE_EXEC=/usr/bin/ccache
+#export USE_CCACHE=1
+#export CCACHE_EXEC=/usr/bin/ccache
 #export CCACHE_DIR=/mnt/ccache
-ccache -M 50G -F 0
+#ccache -M 50G -F 0
 
 # Color
 ON_BLUE=`echo -e "\033[44m"`	# On Blue
@@ -151,7 +151,7 @@ build_kernel_o1s(){
   VARIANT=o1s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=ChicletKernel_${curtime}_${VARIANT}
+  releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
 }
@@ -161,7 +161,7 @@ build_kernel_t2s(){
   VARIANT=t2s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=ChicletKernel_${curtime}_${VARIANT}
+  releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
 }
@@ -171,7 +171,7 @@ build_kernel_p3s(){
   VARIANT=p3s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=ChicletKernel_${curtime}_${VARIANT}
+  releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
 }
@@ -180,19 +180,19 @@ build_kernel_all_devices(){
   read -p "Enter Kernel Release Version v" chicletkernelver
   VARIANT=o1s
   build_kernel
-  releasefilename=ChicletKernel_${curtime}_${VARIANT}
+  releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
 
   VARIANT=t2s
   build_kernel
-  releasefilename=ChicletKernel_${curtime}_${VARIANT}
+  releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
 
   VARIANT=p3s
   build_kernel
-  releasefilename=ChicletKernel_${curtime}_${VARIANT}
+  releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
   pause 'All the builds are done'
