@@ -313,7 +313,7 @@ static void virtio_fs_request_dispatch_work(struct work_struct *work)
 			if (ret == -ENOMEM || ret == -ENOSPC) {
 				spin_lock(&fsvq->lock);
 				list_add_tail(&req->list, &fsvq->queued_reqs);
-				schedule_delayed_work(&fsvq->dispatch_work,
+				queue_delayed_work(system_power_efficient_wq, &fsvq->dispatch_work,
 						      msecs_to_jiffies(1));
 				spin_unlock(&fsvq->lock);
 				return;
@@ -369,7 +369,7 @@ static void virtio_fs_hiprio_dispatch_work(struct work_struct *work)
 					 ret);
 				list_add_tail(&forget->list,
 						&fsvq->queued_reqs);
-				schedule_delayed_work(&fsvq->dispatch_work,
+				queue_delayed_work(system_power_efficient_wq, &fsvq->dispatch_work,
 						msecs_to_jiffies(1));
 			} else {
 				pr_debug("virtio-fs: Could not queue FORGET: err=%d. Dropping it.\n",
@@ -1067,7 +1067,7 @@ __releases(fiq->lock)
 		/* Can't end request in submission context. Use a worker */
 		spin_lock(&fsvq->lock);
 		list_add_tail(&req->list, &fsvq->end_reqs);
-		schedule_delayed_work(&fsvq->dispatch_work, 0);
+		queue_delayed_work(system_power_efficient_wq, &fsvq->dispatch_work, 0);
 		spin_unlock(&fsvq->lock);
 		return;
 	}
