@@ -1,6 +1,5 @@
 config SAMSUNG_TUI
-       tristate "Samsung Trustzone Teegris UI"
-	bool "TUI HW Handler"
+	tristate "Samsung Trustzone Teegris UI"
 	default n
 	help
 		Provide methods for TUI such as acquisition of buffer
@@ -9,7 +8,7 @@ config SAMSUNG_TUI
 		Normal World and Secure World.
 
 config SAMSUNG_TUI_TEST
-	tristate "Testing module for TUI HW handler"
+	bool "Testing module for TUI HW handler"
 	default n
 	depends on SAMSUNG_TUI
 	help
