@@ -1,0 +1,43 @@
+if UML
+
+config BATTERY_SAMSUNG
+	tristate "samsung battery driver"
+	help
+	  Say Y to include support for samsung battery driver
+	  This battery driver integrated all battery-related functions
+	  To see battery-related functions,
+	  refer to sec_charging_common.h
+
+config SEC_PD
+	tristate "support for sec pd"
+	help
+	 Say Y to include support for sec pd control module.
+	 This sec_pd driver integrated all pdo related function.
+	 To see pdo related functions,
+	 refer to sec_pd.h
+
+config REGMAP
+	default y
+	bool
+
+endif
+
+config CHARGER_PCA9468
+	tristate "PCA9468 charger driver"
+	default n
+	depends on DIRECT_CHARGING
+	help
+	  Say Y or M here,
+	  to enable support for the PCA9468 charger.
+	  This is 2:1 switched capacitor direct charger.
+	  To compile the driver as a module, choose M here.
+
+config SEND_PDMSG_IN_PPS_REQUEST_WORK
+	bool "PCA9468 send pdmsg in request work"
+	default n
+	help
+	  Say Y here to enable
+	  support for send pdmsg in direct charger.
+	  This options for pdic not support periodic send pdmsg.
+	  If this is Y in direct charger, direct charger send pdmsg periodic.
+
