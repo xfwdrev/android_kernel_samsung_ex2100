@@ -255,6 +255,7 @@ void drm_kms_helper_poll_enable(struct drm_device *dev)
 
 	if (poll)
 		queue_delayed_work(system_power_efficient_wq, &dev->mode_config.output_poll_work, delay);
+}
 EXPORT_SYMBOL(drm_kms_helper_poll_enable);
 
 static enum drm_connector_status
@@ -459,7 +460,7 @@ retry:
 		 */
 		dev->mode_config.delayed_event = true;
 		if (dev->mode_config.poll_enabled)
-				queue_delayed_work(system_power_efficient_wq, &dev->mode_config.output_poll_work,
+			queue_delayed_work(system_power_efficient_wq, &dev->mode_config.output_poll_work,
 					      0);
 	}
 
