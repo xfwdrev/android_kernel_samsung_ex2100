@@ -5164,7 +5164,7 @@ static int sec_usb_get_property(struct power_supply *psy,
 			break;
 		case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 			/* V -> uV */
-			val->intval = battery->input_voltage * 1000000;
+			val->intval = battery->input_voltage * 100000;
 			return 0;
 		case POWER_SUPPLY_PROP_CURRENT_MAX:
 			/* mA -> uA */
@@ -5253,7 +5253,7 @@ static int sec_ac_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
  		/* V -> uV */
- 		val->intval = battery->input_voltage * 1000000;
+ 		val->intval = battery->input_voltage * 100000;
  		return 0;
  	case POWER_SUPPLY_PROP_CURRENT_MAX:
  		/* mA -> uA */
@@ -5317,7 +5317,7 @@ static int sec_wireless_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
  		/* V -> uV */
- 		val->intval = battery->input_voltage * 1000000;
+ 		val->intval = battery->input_voltage * 100000;
  		return 0;
  	case POWER_SUPPLY_PROP_CURRENT_MAX:
  		/* mA -> uA */
