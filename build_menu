@@ -180,18 +180,21 @@ build_kernel_all_devices(){
   read -p "Enter Kernel Release Version v" chicletkernelver
   VARIANT=o1s
   build_kernel
+  curtime=`date +"%m_%d_%H%M"`
   releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
 
   VARIANT=t2s
   build_kernel
+  curtime=`date +"%m_%d_%H%M"`
   releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
 
   VARIANT=p3s
   build_kernel
+  curtime=`date +"%m_%d_%H%M"`
   releasefilename=ChicletKernel_${chicletkernelver}_${curtime}_${VARIANT}
   anykernel3
   clean
