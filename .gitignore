@@ -1,0 +1,15 @@
+# Lock file
+.wireguard-fetch-lock
+
+# Ignore all .dtb.dtout and .dtb.reverse.dts files
+*.dtb.dtout
+*.dtb.reverse.dts
+
+# Ignore all .dtbo, .dtbo.dtout, .dtbo.reverse.dts files
+*.dtbo
+*.dtbo.dtout
+*.dtbo.reverse.dts
+
+# Ignore all .dts.reverse.dts and .dts.dtout if they exist
+*.dts.dtout
+*.dts.reverse.dts
