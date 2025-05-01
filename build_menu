@@ -205,6 +205,24 @@ build_kernel_all_devices(){
 toolchain
 clang
 
+# Apply SuSFS patch to KernelSU-Next once
+PATCH_MARKER="$DIR/.patched_susfs"
+PATCH_FILE="$DIR/patches/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch"
+
+if [ ! -f "$PATCH_MARKER" ]; then
+  echo "${GREEN}Applying SuSFS patch to KernelSU-Next...${STD}"
+  cd $DIR/KernelSU-Next
+  git apply "$PATCH_FILE"
+  if [ $? -eq 0 ]; then
+    echo "Patch applied successfully."
+    touch "$PATCH_MARKER"
+  else
+    echo "${RED}Failed to apply patch.${STD}"
+    exit 1
+  fi
+  cd $DIR
+fi
+
 # Show menu
 show_menus(){
   echo "${ON_BLUE} B U I L D - M E N U ${STD}"
