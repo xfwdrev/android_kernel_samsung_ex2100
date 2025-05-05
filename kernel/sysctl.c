@@ -229,6 +229,8 @@ static int proc_dointvec_minmax_sysadmin(struct ctl_table *table, int write,
 
 static int proc_dointvec_minmax_coredump(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
+int proc_dointvec_wrapper(struct ctl_table *table, int write,
+		void *buffer, size_t *lenp, loff_t *ppos);
 #ifdef CONFIG_COREDUMP
 static int proc_dostring_coredump(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
@@ -390,7 +392,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_sched_child_runs_first,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= proc_dointvec_wrapper,
 	},
 	{
 		.procname	= "sched_latency_ns",
@@ -2690,6 +2692,14 @@ int proc_dointvec(struct ctl_table *table, int write, void *buffer,
 		  size_t *lenp, loff_t *ppos)
 {
 	return do_proc_dointvec(table, write, buffer, lenp, ppos, NULL, NULL);
+}
+
+int proc_dointvec_wrapper(struct ctl_table *table, int write, void *buffer,
+			  size_t *lenp, loff_t *ppos)
+{
+	if (task_is_booster(current))
+		return 0;
+	return proc_dointvec(table, write, buffer, lenp, ppos);
 }
 
 /**
