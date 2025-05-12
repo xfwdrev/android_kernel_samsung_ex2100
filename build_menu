@@ -78,6 +78,26 @@ build_kernel(){
   fi
 }
 
+build_recovery_kernel(){
+  KERNEL_MAKE_ENV="LOCALVERSION=-ChicletKernel-v${chicletkernelver}"
+  echo "${GREEN}***** Compiling kernel for ${VARIANT} *****${STD}"
+  [ ! -d "out_recovery" ] && mkdir out_recovery
+  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV chiclet_${VARIANT}_defconfig recovery.config
+  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV
+
+  [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out_recovery/Image.gz
+  if [ -e arch/arm64/boot/Image ]; then
+    cp arch/arm64/boot/Image $(pwd)/out_recovery/Image
+
+    DTB_DIR=$(pwd)/arch/arm64/boot/dts
+    $(pwd)/tools/mkdtimg cfg_create $(pwd)/out_recovery/dtb.img dt.configs/exynos2100.cfg -d ${DTB_DIR}/exynos
+    $(pwd)/tools/mkdtimg cfg_create $(pwd)/out_recovery/dtbo.img dt.configs/${VARIANT}.cfg -d ${DTB_DIR}/samsung/${VARIANT}
+    echo "${GREEN}***** Ready to Roar *****${STD}"
+  else
+    echo 'Error'
+  fi
+}
+
 install-kernel-modules(){
     [ -d "$2" ] && rm -rf $2
     mkdir -p $2
@@ -176,6 +196,27 @@ build_kernel_p3s(){
   clean
 }
 
+build_rkernel_o1s(){
+  read -p "Enter Recovery Kernel Release Version v" chicletkernelver
+  VARIANT=o1s
+  build_recovery_kernel
+  clean
+}
+
+build_rkernel_t2s(){
+  read -p "Enter Recovery Kernel Release Version v" chicletkernelver
+  VARIANT=t2s
+  build_recovery_kernel
+  clean
+}
+
+build_rkernel_p3s(){
+  read -p "Enter Recovery Kernel Release Version v" chicletkernelver
+  VARIANT=p3s
+  build_recovery_kernel
+  clean
+}
+
 build_kernel_all_devices(){
   read -p "Enter Kernel Release Version v" chicletkernelver
   VARIANT=o1s
@@ -230,10 +271,13 @@ show_menus(){
   echo "2. ${Under_Line}B${STD}uild kernel for t2s (S21+)"
   echo "3. ${Under_Line}B${STD}uild kernel for p3s (S21 Ultra)"
   echo "4. ${Under_Line}B${STD}uild kernel for all devices"
-  echo "5. Build kernel ${Under_Line}m${STD}odules"
-  echo "6. ${Under_Line}C${STD}lean"
-  echo "7. Make ${Under_Line}f${STD}lashable zip"
-  echo "8. E${Under_Line}x${STD}it"
+  echo "5. ${Under_Line}B${STD}uild Recovery kernel for o1s (S21)"
+  echo "6. ${Under_Line}B${STD}uild Recovery kernel for t2s (S21+)"
+  echo "7. ${Under_Line}B${STD}uild Recovery kernel for p3s (S21 Ultra)"
+  echo "8. Build kernel ${Under_Line}m${STD}odules"
+  echo "9. ${Under_Line}C${STD}lean"
+  echo "10. Make ${Under_Line}f${STD}lashable zip"
+  echo "11. E${Under_Line}x${STD}it"
 }
 
 # Read input
@@ -245,10 +289,13 @@ read_options(){
     2|b|B) build_kernel_t2s ;;
     3|b|B) build_kernel_p3s ;;
     4|a|A) build_kernel_all_devices ;;
-    5|m|M) build_kernel_modules ;;
-    6|c|C) clean ;;
-    7|f|F) anykernel3;;
-    8|x|X) exit 0;;
+    5|b|B) build_rkernel_o1s ;;
+    6|b|B) build_rkernel_t2s ;;
+    7|b|B) build_rkernel_p3s ;;
+    8|m|M) build_kernel_modules ;;
+    9|c|C) clean ;;
+    10|f|F) anykernel3;;
+    11|x|X) exit 0;;
     *) pause 'return to Main menu' 'Invalid option, '
   esac
 }
