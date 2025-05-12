@@ -13,3 +13,7 @@
 # Ignore all .dts.reverse.dts and .dts.dtout if they exist
 *.dts.dtout
 *.dts.reverse.dts
+
+.patched_susfs
+dtb_build.log
+out_recovery
