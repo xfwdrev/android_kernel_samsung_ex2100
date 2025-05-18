@@ -5,8 +5,6 @@ obj-$(CONFIG_B43LEGACY)		+= b43legacy/
 obj-$(CONFIG_BRCMFMAC)	+= brcm80211/
 obj-$(CONFIG_BRCMSMAC)	+= brcm80211/
 
-$(warning wireless broadcom MAKEFILES)
-$(warning DHD // WLAN_VENDOR: $(CONFIG_WLAN_VENDOR_BROADCOM))
 ifeq ($(SEC_BUILD_OPTION_ALT_WIFI), true)
 export CONFIG_BCM4389=m
 export CONFIG_BCM4375=n
