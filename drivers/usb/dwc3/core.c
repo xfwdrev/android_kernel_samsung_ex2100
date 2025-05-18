@@ -1807,11 +1807,11 @@ int dwc3_probe(struct platform_device *pdev,
 	dwc3_debugfs_init(dwc);
 	INIT_WORK(&dwc->set_vbus_current_work, dwc3_exynos_set_vbus_current_work);
 
+	dma_set_max_seg_size(dev, UINT_MAX);
 	/* Disable LDO */
 	exynos_usbdrd_phy_conn(dwc->usb2_generic_phy, 0);
 
 	pr_info("%s: ---\n", __func__);
-	dma_set_max_seg_size(dev, UINT_MAX);
 
 	return 0;
 
@@ -1875,8 +1875,6 @@ static int dwc3_remove(struct platform_device *pdev)
 
 	return 0;
 }
-<<<<<<< HEAD
-=======
 
 #ifdef CONFIG_PM
 static int dwc3_core_init_for_resume(struct dwc3 *dwc)
@@ -2187,7 +2185,7 @@ static const struct of_device_id of_dwc3_match[] = {
 	{ },
 };
 MODULE_DEVICE_TABLE(of, of_dwc3_match);
->>>>>>> 28445c9a29e076a5cd4c069b3f8ad6a4f6133619
+
 #endif
 
 #ifdef CONFIG_ACPI
