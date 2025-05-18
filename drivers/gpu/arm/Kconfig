@@ -23,9 +23,7 @@ menu "ARM GPU Configuration"
 
 choice
 	prompt "Mali Version Configuration"
-	default MALI_DDK_VALHALL_R32P1 if $(SEC_BUILD_CONF_VENDOR_BUILD_OS) <= 12
-	default MALI_DDK_VALHALL_R32P1 if $(SEC_BUILD_CONF_VENDOR_BUILD_OS) = 13
-	default MALI_DDK_VALHALL_R38P0 if $(SEC_BUILD_CONF_VENDOR_BUILD_OS) >= 14
+	default MALI_DDK_VALHALL_R38P0
 
 	help
 	  Select Mali GPU driver version.
