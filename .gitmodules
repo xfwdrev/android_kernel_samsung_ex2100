@@ -4,3 +4,6 @@
 [submodule "toolchain/gcc_4.9"]
 	path = toolchain/gcc_4.9
 	url = https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9
+[submodule "toolchain/mkbootimg"]
+	path = toolchain/mkbootimg
+	url = https://android.googlesource.com/platform/system/tools/mkbootimg
