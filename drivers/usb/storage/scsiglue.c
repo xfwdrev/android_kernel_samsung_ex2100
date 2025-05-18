@@ -447,6 +447,10 @@ static DEF_SCSI_QCMD(queuecommand)
 /* Command timeout and abort */
 static int command_abort_matching(struct us_data *us, struct scsi_cmnd *srb_match)
 {
+	usb_stor_dbg(us, "%s called\n", __func__);
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	printk(KERN_ERR "usb-storage: %s scsi_lock +\n", __func__);
+#endif
 	/*
 	 * us->srb together with the TIMED_OUT, RESETTING, and ABORTING
 	 * bits are protected by the host lock.
@@ -457,13 +461,17 @@ static int command_abort_matching(struct us_data *us, struct scsi_cmnd *srb_matc
 	if (!us->srb) {
 		scsi_unlock(us_to_host(us));
 		usb_stor_dbg(us, "-- nothing to abort\n");
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		printk(KERN_ERR "usb-storage: %s -- nothing to abort -\n",
+				__func__);
+#endif	
 		return SUCCESS;
 	}
 
 	/* Does the command match the passed srb if any ? */
 	if (srb_match && us->srb != srb_match) {
 		scsi_unlock(us_to_host(us));
-		usb_stor_dbg(us, "-- pending command mismatch\n");
+		usb_stor_dbg(us, "-- pending command mismatch\n");	
 		return FAILED;
 	}
 

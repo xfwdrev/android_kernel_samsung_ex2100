@@ -2009,6 +2009,7 @@ static int pl330_update(struct pl330_dmac *pl330)
 
 			/* Get going again ASAP */
 			pl330_start_thread(thrd);
+			}
 
 			/* For now, just make a list of callbacks to be done */
 			list_add_tail(&descdone->rqd, &pl330->req_done);
