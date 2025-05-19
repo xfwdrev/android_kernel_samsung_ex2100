@@ -1,4 +1,3 @@
-# Lock file
 .wireguard-fetch-lock
 
 # Ignore all .dtb.dtout and .dtb.reverse.dts files
@@ -14,6 +13,5 @@
 *.dts.dtout
 *.dts.reverse.dts
 
-.patched_susfs
-dtb_build.log
-out_recovery
+build/out
+net/wireguard
