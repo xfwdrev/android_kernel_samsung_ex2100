@@ -1501,6 +1501,10 @@ static void handle_cmd_completion(struct xhci_hcd *xhci,
 
 	/* If CMD ring stopped we own the trbs between enqueue and dequeue */
 	if (cmd_comp_code == COMP_COMMAND_RING_STOPPED) {
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		xhci_info(xhci,
+			 "cmd_comp_code == COMP_COMMAND_RING_STOPPED\n");
+#endif
 		complete_all(&xhci->cmd_ring_stop_completion);
 		return;
 	}

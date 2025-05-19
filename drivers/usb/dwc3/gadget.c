@@ -2098,8 +2098,7 @@ static void dwc3_stop_active_transfers(struct dwc3 *dwc)
 static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 {
 	u32			reg;
-	u32			timeout = 2000;
-	u32			saved_config = 0;
+	u32			timeout = 500;
 
 	if (pm_runtime_suspended(dwc->dev))
 		return 0;
@@ -2142,7 +2141,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 
 	do {
-		usleep_range(1000, 2000);
 		reg = dwc3_readl(dwc->regs, DWC3_DSTS);
 		reg &= DWC3_DSTS_DEVCTRLHLT;
 	} while (--timeout && !(!is_on ^ !reg));
@@ -4170,6 +4168,8 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 		 * after processing the pending events in dwc3_process_pending
 		 * events().
 		 */
+		pr_err("%s: runtime suspend is prohibited",
+					__func__);
 		pm_runtime_get(dwc->dev);
 		disable_irq_nosync(dwc->irq_gadget);
 		return IRQ_HANDLED;
@@ -4188,6 +4188,12 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	count &= DWC3_GEVNTCOUNT_MASK;
 	if (!count)
 		return IRQ_NONE;
+
+	if (count > evt->length) {
+		dev_err_ratelimited(dwc->dev, "invalid count(%u) > evt->length(%u)\n",
+			count, evt->length);
+		return IRQ_NONE;
+	}
 
 	evt->count = count;
 	evt->flags |= DWC3_EVENT_PENDING;
