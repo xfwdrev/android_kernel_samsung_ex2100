@@ -46,8 +46,6 @@ CLANG_DIR=$PWD/toolchain/clang-r416183b
 GCC_DIR=$PWD/toolchain/gcc_4.9
 PATH=$CLANG_DIR/bin:$CLANG_DIR/lib:$GCC_DIR/bin:$GCC_DIR/lib:$PATH
 
-echo $PATH
-
 MAKE_ARGS="
 LLVM=1 \
 LLVM_IAS=1 \
@@ -61,7 +59,7 @@ O=out
 case $MODEL in
 o1s)
     KERNEL_DEFCONFIG=chiclet_o1s_defconfig
-    BOARD=SRPUH13A011
+    BOARD=SRPTH19C011KU
 ;;
 t2s)
     KERNEL_DEFCONFIG=chiclet_t2s_defconfig
@@ -69,7 +67,7 @@ t2s)
 ;;
 p3s)
     KERNEL_DEFCONFIG=chiclet_p3s_defconfig
-    BOARD=SRPUH13B009
+    BOARD=SRPTH19D013KU
 ;;
 *)
     unset_flags
@@ -275,6 +273,9 @@ build_vendor_boot() {
 
     # Copy module files for vendor_ramdisk00
     cp -a build/out/$MODEL/modules/lib/* build/out/$MODEL/vendor_ramdisk00/lib
+
+    # Copy device firmware files for vendor_ramdisk00
+    cp -a build/ramdisk/vendor_boot/vendor_firmware/$MODEL/* build/out/$MODEL/vendor_ramdisk00
 
     # Pack RAMDisks
     # vendor_ramdisk == ramdisk00
