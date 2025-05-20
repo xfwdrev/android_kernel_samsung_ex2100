@@ -236,6 +236,10 @@
   __memcpy_fromio
   memremap
   memset
+  memstart_addr
+  memunmap
+  mii_ethtool_gset
+  mii_nway_restart
   misc_deregister
   misc_register
   mod_timer
@@ -425,6 +429,7 @@
   strlen
   strncmp
   strncpy
+  strscpy
   strscpy_pad
   __sw_hweight32
   __sw_hweight64
@@ -595,7 +600,6 @@
   skb_copy
   skb_realloc_headroom
   strlcat
-  strscpy
   __sw_hweight16
   __sw_hweight8
   synchronize_net
@@ -610,8 +614,8 @@
   pci_clear_master
   pci_disable_device
   pci_disable_msi
+  pcie_capability_clear_and_set_word
   pcie_capability_read_word
-  pcie_capability_write_word
   pci_enable_device
   pci_enable_msi
   pci_iomap
@@ -1048,7 +1052,6 @@
   kvmalloc_node
   llist_add_batch
   memparse
-  memunmap
   mipi_dsi_create_packet
   mipi_dsi_host_register
   mipi_dsi_host_unregister
@@ -1441,43 +1444,5 @@
   of_device_request_module
   __request_module
 
-# required by xhci-hcd.ko
-  add_timer
-  mod_delayed_work_on
-  __num_online_cpus
-  param_ops_ullong
-  pci_alloc_irq_vectors_affinity
-  pci_free_irq_vectors
-  pci_irq_vector
-  radix_tree_maybe_preload
-  sg_pcopy_from_buffer
-  sg_pcopy_to_buffer
-  trace_print_symbols_seq
-  usb_amd_pt_check_port
-  usb_asmedia_modifyflowcontrol
-  usb_disable_xhci_ports
-  usb_hcd_end_port_resume
-  usb_hcd_irq
-  usb_hcd_map_urb_for_dma
-  usb_hcd_start_port_resume
-  usb_hub_clear_tt_buffer
-  usb_wakeup_notification
-  wait_for_completion
-
-# required by xhci-pci-renesas.ko
-  device_release_driver
-  pci_dev_get
-  pci_read_config_word
-  pci_write_config_byte
-  request_firmware_nowait
-
-# required by xhci-pci.ko
-  pci_d3cold_disable
-  pci_set_mwi
-  pci_set_power_state
-  usb_create_shared_hcd
-  usb_enable_intel_xhci_ports
-
-# required by xhci-plat-hcd.ko
-  of_usb_host_tpl_support
-  __usb_create_hcd
+# preserved by --additions-only
+  pcie_capability_write_word
