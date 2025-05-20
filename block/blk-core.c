@@ -120,7 +120,6 @@ void blk_rq_init(struct request_queue *q, struct request *rq)
 	rq->internal_tag = -1;
 	rq->start_time_ns = ktime_get_ns();
 	rq->part = NULL;
-	blk_crypto_rq_set_defaults(rq);
 }
 EXPORT_SYMBOL(blk_rq_init);
 
@@ -1448,13 +1447,6 @@ bool blk_update_request(struct request *req, blk_status_t error,
 	    error == BLK_STS_OK)
 		req->q->integrity.profile->complete_fn(req, nr_bytes);
 #endif
-
-	/*
-	 * Upper layers may call blk_crypto_evict_key() anytime after the last
-	 * bio_endio().  Therefore, the keyslot must be released before that.
-	 */
-	if (blk_crypto_rq_has_keyslot(req) && nr_bytes >= blk_rq_bytes(req))
-		__blk_crypto_rq_put_keyslot(req);
 
 	if (unlikely(error && !blk_rq_is_passthrough(req) &&
 		     !(req->rq_flags & RQF_QUIET)))

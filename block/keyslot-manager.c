@@ -436,16 +436,24 @@ bool keyslot_manager_crypto_mode_supported(struct keyslot_manager *ksm,
 	return ksm->max_dun_bytes_supported >= dun_bytes;
 }
 
-/*
- * This is an internal function that evicts a key from an inline encryption
- * device that can be either a real device or the blk-crypto-fallback "device".
- * It is used only by blk_crypto_evict_key(); see that function for details.
+/**
+ * keyslot_manager_evict_key() - Evict a key from the lower layer device.
+ * @ksm: The keyslot manager to evict from
+ * @key: The key to evict
+ *
+ * Find the keyslot that the specified key was programmed into, and evict that
+ * slot from the lower layer device if that slot is not currently in use.
+ *
+ * Context: Process context. Takes and releases ksm->lock.
+ * Return: 0 on success, -EBUSY if the key is still in use, or another
+ *	   -errno value on other error.
  */
 int keyslot_manager_evict_key(struct keyslot_manager *ksm,
 			      const struct blk_crypto_key *key)
 {
-	struct blk_ksm_keyslot *slot;
+	int slot;
 	int err;
+	struct keyslot *slotp;
 
 	if (keyslot_manager_is_passthrough(ksm)) {
 		if (ksm->ksm_ll_ops.keyslot_evict) {
@@ -457,33 +465,28 @@ int keyslot_manager_evict_key(struct keyslot_manager *ksm,
 		return 0;
 	}
 
-	blk_ksm_hw_enter(ksm);
-	slot = blk_ksm_find_keyslot(ksm, key);
-	if (!slot) {
-		/*
-		 * Not an error, since a key not in use by I/O is not guaranteed
-		 * to be in a keyslot.  There can be more keys than keyslots.
-		 */
-		err = 0;
-		goto out;
-	}
+	keyslot_manager_hw_enter(ksm);
 
-	if (WARN_ON_ONCE(atomic_read(&slot->slot_refs) != 0)) {
-		/* BUG: key is still in use by I/O */
-		err = -EBUSY;
-		goto out_remove;
+	slot = find_keyslot(ksm, key);
+	if (slot < 0) {
+		err = slot;
+		goto out_unlock;
 	}
-	err = ksm->ksm_ll_ops.keyslot_evict(ksm, key,
-					    blk_ksm_get_slot_idx(slot));
-out_remove:
-	/*
-	 * Callers free the key even on error, so unlink the key from the hash
-	 * table and clear slot->key even on error.
-	 */
-	hlist_del(&slot->hash_node);
-	slot->key = NULL;
-out:
-	blk_ksm_hw_exit(ksm);
+	slotp = &ksm->slots[slot];
+
+	if (atomic_read(&slotp->slot_refs) != 0) {
+		err = -EBUSY;
+		goto out_unlock;
+	}
+	err = ksm->ksm_ll_ops.keyslot_evict(ksm, key, slot);
+	if (err)
+		goto out_unlock;
+
+	hlist_del(&slotp->hash_node);
+	memzero_explicit(&slotp->key, sizeof(slotp->key));
+	err = 0;
+out_unlock:
+	keyslot_manager_hw_exit(ksm);
 	return err;
 }
 

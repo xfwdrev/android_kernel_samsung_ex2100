@@ -696,6 +696,8 @@ __u32 cookie_v4_init_sequence(struct request_sock *req, const struct sock *sk,
 			      const struct sk_buff *skb, __u16 *mss);
 #else
 __u32 cookie_v4_init_sequence(const struct sk_buff *skb, __u16 *mss);
+#endif
+
 u64 cookie_init_timestamp(struct request_sock *req, u64 now);
 bool cookie_timestamp_decode(const struct net *net,
 			     struct tcp_options_received *opt);

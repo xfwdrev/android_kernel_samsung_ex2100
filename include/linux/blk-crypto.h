@@ -27,8 +27,8 @@ int blk_crypto_start_using_mode(enum blk_crypto_mode_num crypto_mode,
 				bool is_hw_wrapped_key,
 				struct request_queue *q);
 
-void blk_crypto_evict_key(struct request_queue *q,
-			  const struct blk_crypto_key *key);
+int blk_crypto_evict_key(struct request_queue *q,
+			 const struct blk_crypto_key *key);
 
 #else /* CONFIG_BLK_INLINE_ENCRYPTION */
 

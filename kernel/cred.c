@@ -489,22 +489,11 @@ int commit_creds(struct cred *new)
 {
 	struct task_struct *task = current;
 	const struct cred *old = task->real_cred;
-<<<<<<< HEAD
 #ifdef CONFIG_KDP_CRED
 	int ret = 0;
 #endif
 	kdebug("commit_creds(%p{%d,%d})", new,
 	       atomic_read(&new->usage),
-=======
-
-<<<<<<< HEAD
-	kdebug("commit_creds(%p{%ld,%d})", new,
-	       atomic_long_read(&new->usage),
->>>>>>> 4337486785d79956a4cbcdb0e875c4a043ef50f9
-=======
-	kdebug("commit_creds(%p{%d,%d})", new,
-	       atomic_read(&new->usage),
->>>>>>> 5857ea0c39a138535e2dea11fe77b59bd3f49665
 	       read_cred_subscribers(new));
 
 	BUG_ON(task->cred != old);
@@ -513,8 +502,6 @@ int commit_creds(struct cred *new)
 	validate_creds(old);
 	validate_creds(new);
 #endif
-<<<<<<< HEAD
-<<<<<<< HEAD
 #ifdef CONFIG_KDP_CRED
 	ret = is_kdp_protect_addr((unsigned long)new);
 
@@ -525,12 +512,6 @@ int commit_creds(struct cred *new)
 	else
 #endif
 	BUG_ON(atomic_read(&new->usage) < 1);
-=======
-	BUG_ON(atomic_long_read(&new->usage) < 1);
->>>>>>> 4337486785d79956a4cbcdb0e875c4a043ef50f9
-=======
-	BUG_ON(atomic_read(&new->usage) < 1);
->>>>>>> 5857ea0c39a138535e2dea11fe77b59bd3f49665
 
 	get_cred(new); /* we will require a ref for the subj creds too */
 
@@ -621,28 +602,16 @@ EXPORT_SYMBOL(commit_creds);
  */
 void abort_creds(struct cred *new)
 {
-<<<<<<< HEAD
-<<<<<<< HEAD
 #ifdef CONFIG_KDP_CRED
 	int ret = 0;
 #endif
 	kdebug("abort_creds(%p{%d,%d})", new,
 	       atomic_read(&new->usage),
-=======
-	kdebug("abort_creds(%p{%ld,%d})", new,
-	       atomic_long_read(&new->usage),
->>>>>>> 4337486785d79956a4cbcdb0e875c4a043ef50f9
-=======
-	kdebug("abort_creds(%p{%d,%d})", new,
-	       atomic_read(&new->usage),
->>>>>>> 5857ea0c39a138535e2dea11fe77b59bd3f49665
 	       read_cred_subscribers(new));
 
 #ifdef CONFIG_DEBUG_CREDENTIALS
 	BUG_ON(read_cred_subscribers(new) != 0);
 #endif
-<<<<<<< HEAD
-<<<<<<< HEAD
 #ifdef CONFIG_KDP_CRED
 	ret = is_kdp_protect_addr((unsigned long)new);
 
@@ -653,12 +622,6 @@ void abort_creds(struct cred *new)
 	else
 #endif
 	BUG_ON(atomic_read(&new->usage) < 1);
-=======
-	BUG_ON(atomic_long_read(&new->usage) < 1);
->>>>>>> 4337486785d79956a4cbcdb0e875c4a043ef50f9
-=======
-	BUG_ON(atomic_read(&new->usage) < 1);
->>>>>>> 5857ea0c39a138535e2dea11fe77b59bd3f49665
 	put_cred(new);
 }
 EXPORT_SYMBOL(abort_creds);
@@ -673,19 +636,8 @@ EXPORT_SYMBOL(abort_creds);
 const struct cred *override_creds(const struct cred *new)
 {
 	const struct cred *old = current->cred;
-<<<<<<< HEAD
 	kdebug("override_creds(%p{%d,%d})", new,
 	       atomic_read(&new->usage),
-=======
-
-<<<<<<< HEAD
-	kdebug("override_creds(%p{%ld,%d})", new,
-	       atomic_long_read(&new->usage),
->>>>>>> 4337486785d79956a4cbcdb0e875c4a043ef50f9
-=======
-	kdebug("override_creds(%p{%d,%d})", new,
-	       atomic_read(&new->usage),
->>>>>>> 5857ea0c39a138535e2dea11fe77b59bd3f49665
 	       read_cred_subscribers(new));
 
 	validate_creds(old);

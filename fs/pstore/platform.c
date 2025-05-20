@@ -561,7 +561,7 @@ out:
  */
 int pstore_register(struct pstore_info *psi)
 {
-	char *new_backend;
+	struct module *owner = psi->owner;
 
 	if (backend && strcmp(backend, psi->name)) {
 		pr_warn("ignoring unexpected backend '%s'\n", psi->name);
@@ -582,16 +582,11 @@ int pstore_register(struct pstore_info *psi)
 		return -EINVAL;
 	}
 
-	new_backend = kstrdup(psi->name, GFP_KERNEL);
-	if (!new_backend)
-		return -ENOMEM;
-
-	mutex_lock(&psinfo_lock);
+	spin_lock(&pstore_lock);
 	if (psinfo) {
 		pr_warn("backend '%s' already loaded: ignoring '%s'\n",
 			psinfo->name, psi->name);
-		mutex_unlock(&psinfo_lock);
-		kfree(new_backend);
+		spin_unlock(&pstore_lock);
 		return -EBUSY;
 	}
 
@@ -633,7 +628,7 @@ int pstore_register(struct pstore_info *psi)
 	 * Update the module parameter backend, so it is visible
 	 * through /sys/module/pstore/parameters/backend
 	 */
-	backend = new_backend;
+	backend = psi->name;
 
 	pr_info("Registered %s as persistent store backend\n", psi->name);
 

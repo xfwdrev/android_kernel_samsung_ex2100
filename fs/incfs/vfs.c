@@ -798,60 +798,6 @@ static struct dentry *open_or_create_index_dir(struct dentry *backing_dir,
 	return index_dentry;
 }
 
-static int read_single_page_timeouts(struct data_file *df, struct file *f,
-				     int block_index, struct mem_range range,
-				     struct mem_range tmp,
-				     unsigned int *delayed_min_us)
-{
-	struct mount_info *mi = df->df_mount_info;
-	struct incfs_read_data_file_timeouts timeouts = {
-		.max_pending_time_us = U32_MAX,
-	};
-	int uid = current_uid().val;
-	int i;
-
-	spin_lock(&mi->mi_per_uid_read_timeouts_lock);
-	for (i = 0; i < mi->mi_per_uid_read_timeouts_size /
-		sizeof(*mi->mi_per_uid_read_timeouts); ++i) {
-		struct incfs_per_uid_read_timeouts *t =
-			&mi->mi_per_uid_read_timeouts[i];
-
-		if(t->uid == uid) {
-			timeouts.min_time_us = t->min_time_us;
-			timeouts.min_pending_time_us = t->min_pending_time_us;
-			timeouts.max_pending_time_us = t->max_pending_time_us;
-			break;
-		}
-	}
-	spin_unlock(&mi->mi_per_uid_read_timeouts_lock);
-	if (timeouts.max_pending_time_us == U32_MAX) {
-		u64 read_timeout_us = (u64)mi->mi_options.read_timeout_ms *
-					1000;
-
-		timeouts.max_pending_time_us = read_timeout_us <= U32_MAX ?
-					       read_timeout_us : U32_MAX;
-	}
-
-	return incfs_read_data_file_block(range, f, block_index, tmp,
-					  &timeouts, delayed_min_us);
-}
-
-static int usleep_interruptible(u32 us)
-{
-	/* See:
-	 * https://www.kernel.org/doc/Documentation/timers/timers-howto.txt
-	 * for explanation
-	 */
-	if (us < 10) {
-		udelay(us);
-		return 0;
-	} else if (us < 20000) {
-		usleep_range(us, us + us / 10);
-		return 0;
-	} else
-		return msleep_interruptible(us / 1000);
-}
-
 static int read_single_page(struct file *f, struct page *page)
 {
 	loff_t offset = 0;
@@ -862,7 +808,7 @@ static int read_single_page(struct file *f, struct page *page)
 	int result = 0;
 	void *page_start = kmap(page);
 	int block_index;
-	unsigned int delayed_min_us = 0;
+	int timeout_ms;
 
 	if (!df)
 		return -EBADF;
@@ -877,9 +823,11 @@ static int read_single_page(struct file *f, struct page *page)
 			.len = 2 * INCFS_DATA_FILE_BLOCK_SIZE
 		};
 
-		read_result = read_single_page_timeouts(df, f, block_index,
-					range(page_start, bytes_to_read), tmp,
-					&delayed_min_us);
+		tmp.data = (u8 *)__get_free_pages(GFP_NOFS, get_order(tmp.len));
+		bytes_to_read = min_t(loff_t, size - offset, PAGE_SIZE);
+		read_result = incfs_read_data_file_block(
+			range(page_start, bytes_to_read), f, block_index,
+			timeout_ms, tmp);
 
 		free_pages((unsigned long)tmp.data, get_order(tmp.len));
 	} else {
@@ -900,8 +848,6 @@ static int read_single_page(struct file *f, struct page *page)
 	flush_dcache_page(page);
 	kunmap(page);
 	unlock_page(page);
-	if (delayed_min_us)
-		usleep_interruptible(delayed_min_us);
 	return result;
 }
 
@@ -1336,62 +1282,6 @@ out:
 	if (error)
 		pr_debug("incfs: %s err:%d\n", __func__, error);
 
-	dput(dir);
-	dput(file);
-}
-
-static void handle_file_completed(struct file *f, struct data_file *df)
-{
-	struct backing_file_context *bfc;
-	struct mount_info *mi = df->df_mount_info;
-	char *file_id_str = NULL;
-	struct dentry *incomplete_file_dentry = NULL;
-	const struct cred *old_cred = override_creds(mi->mi_owner);
-	int error;
-
-	/* Truncate file to remove any preallocated space */
-	bfc = df->df_backing_file_context;
-	if (bfc) {
-		struct file *f = bfc->bc_file;
-
-		if (f) {
-			loff_t size = i_size_read(file_inode(f));
-
-			error = vfs_truncate(&f->f_path, size);
-			if (error)
-				/* No useful action on failure */
-				pr_warn("incfs: Failed to truncate complete file: %d\n",
-					error);
-		}
-	}
-
-	/* This is best effort - there is no useful action to take on failure */
-	file_id_str = file_id_to_str(df->df_id);
-	if (!file_id_str)
-		goto out;
-
-	incomplete_file_dentry = incfs_lookup_dentry(
-					df->df_mount_info->mi_incomplete_dir,
-					file_id_str);
-	if (!incomplete_file_dentry || IS_ERR(incomplete_file_dentry)) {
-		incomplete_file_dentry = NULL;
-		goto out;
-	}
-
-	if (!d_really_is_positive(incomplete_file_dentry))
-		goto out;
-
-	vfs_fsync(df->df_backing_file_context->bc_file, 0);
-	error = incfs_unlink(incomplete_file_dentry);
-	if (error) {
-		pr_warn("incfs: Deleting incomplete file failed: %d\n", error);
-		goto out;
-	}
-
-	notify_unlink(f->f_path.dentry, file_id_str, INCFS_INCOMPLETE_NAME);
-
-out:
-	dput(incomplete_file_dentry);
 	kfree(file_id_str);
 	kfree(file_name);
 	kfree(attr_value);
@@ -1413,7 +1303,6 @@ static long ioctl_fill_blocks(struct file *f, void __user *arg)
 	u8 *data_buf = NULL;
 	ssize_t error = 0;
 	int i = 0;
-	bool complete = false;
 
 	if (!df)
 		return -EBADF;
@@ -1455,7 +1344,7 @@ static long ioctl_fill_blocks(struct file *f, void __user *arg)
 							     data_buf);
 		} else {
 			error = incfs_process_new_data_block(df, &fill_block,
-							data_buf, &complete);
+							     data_buf);
 		}
 		if (error)
 			break;
@@ -1463,9 +1352,6 @@ static long ioctl_fill_blocks(struct file *f, void __user *arg)
 
 	if (data_buf)
 		free_pages((unsigned long)data_buf, get_order(data_buf_size));
-
-	if (complete)
-		handle_file_completed(f, df);
 
 	/*
 	 * Only report the error if no records were processed, otherwise

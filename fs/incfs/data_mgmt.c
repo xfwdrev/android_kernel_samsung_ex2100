@@ -809,14 +809,11 @@ static void notify_pending_reads(struct mount_info *mi,
 	mutex_unlock(&mi->mi_pending_reads_mutex);
 	wake_up_all(&segment->new_data_arrival_wq);
 
-	atomic_inc(&mi->mi_blocks_written);
-	wake_up_all(&mi->mi_blocks_written_notif_wq);
 }
 
 static int wait_for_data_block(struct data_file *df, int block_index,
-			       struct data_file_block *res_block,
-			       struct incfs_read_data_file_timeouts *timeouts,
-			       unsigned int *delayed_min_us)
+			       int timeout_ms,
+			       struct data_file_block *res_block)
 {
 	struct data_file_block block = {};
 	struct data_file_segment *segment = NULL;
@@ -824,8 +821,6 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 	struct mount_info *mi = NULL;
 	int error = 0;
 	int wait_res = 0;
-	unsigned int delayed_pending_us = 0;
-	bool delayed_pending = false;
 
 	if (!df || !res_block)
 		return -EFAULT;
@@ -855,10 +850,6 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 	/* If the block was found, just return it. No need to wait. */
 	if (is_data_block_present(&block)) {
 		*res_block = block;
-		if (timeouts && timeouts->min_time_us) {
-			*delayed_min_us = timeouts->min_time_us;
-			goto out;
-		}
 		return 0;
 	}
 
@@ -895,14 +886,7 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 		return wait_res;
 	}
 
-	delayed_pending = true;
-	delayed_pending_us = timeouts->max_pending_time_us -
-				jiffies_to_usecs(wait_res);
-	if (timeouts->min_pending_time_us > delayed_pending_us)
-		*delayed_min_us = timeouts->min_pending_time_us -
-					     delayed_pending_us;
-
-	error = down_read_killable(&segment->rwsem);
+	error = mutex_lock_interruptible(&segment->blockmap_mutex);
 	if (error)
 		return error;
 
@@ -924,50 +908,13 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 		}
 	}
 
-out:
-	if (error)
-		return error;
-
-	if (delayed_pending) {
-		mi->mi_reads_delayed_pending++;
-		mi->mi_reads_delayed_pending_us +=
-			delayed_pending_us;
-	}
-
-	if (delayed_min_us && *delayed_min_us) {
-		mi->mi_reads_delayed_min++;
-		mi->mi_reads_delayed_min_us += *delayed_min_us;
-	}
-
-	return 0;
-}
-
-static int incfs_update_sysfs_error(struct file *file, int index, int result,
-				struct mount_info *mi, struct data_file *df)
-{
-	int error;
-
-	if (result >= 0)
-		return 0;
-
-	error = mutex_lock_interruptible(&mi->mi_le_mutex);
-	if (error)
-		return error;
-
-	mi->mi_le_file_id = df->df_id;
-	mi->mi_le_time_us = ktime_to_us(ktime_get());
-	mi->mi_le_page = index;
-	mi->mi_le_errno = result;
-	mi->mi_le_uid = current_uid().val;
-	mutex_unlock(&mi->mi_le_mutex);
-
-	return 0;
+	mutex_unlock(&segment->blockmap_mutex);
+	return error;
 }
 
 ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
-			int index, struct mem_range tmp,
-			struct incfs_read_data_file_timeouts *timeouts,
-			unsigned int *delayed_min_us)
+				   int index, int timeout_ms,
+				   struct mem_range tmp)
 {
 	loff_t pos;
 	ssize_t result;
@@ -986,8 +933,7 @@ ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
 	mi = df->df_mount_info;
 	bfc = df->df_backing_file_context;
 
-	result = wait_for_data_block(df, index, &block, timeouts,
-				     delayed_min_us);
+	result = wait_for_data_block(df, index, timeout_ms, &block);
 	if (result < 0)
 		goto out;
 
@@ -1033,8 +979,7 @@ out:
 }
 
 int incfs_process_new_data_block(struct data_file *df,
-				 struct incfs_fill_block *block, u8 *data,
-				 bool *complete)
+				 struct incfs_fill_block *block, u8 *data)
 {
 	struct mount_info *mi = NULL;
 	struct backing_file_context *bfc = NULL;
@@ -1064,44 +1009,21 @@ int incfs_process_new_data_block(struct data_file *df,
 
 	error = get_data_file_block(df, block->block_index, &existing_block);
 	if (error)
-		return error;
-	if (is_data_block_present(&existing_block))
+		goto unlock;
+	if (is_data_block_present(&existing_block)) {
 		/* Block is already present, nothing to do here */
-		return 0;
-
-	error = down_write_killable(&segment->rwsem);
-	if (error)
-		return error;
-
-	/* Recheck inside write lock */
-	error = get_data_file_block(df, block->block_index, &existing_block);
-	if (error)
-		goto out_up_write;
-
-	if (is_data_block_present(&existing_block))
-		goto out_up_write;
+		goto unlock;
+	}
 
 	error = mutex_lock_interruptible(&bfc->bc_mutex);
-	if (error)
-		goto out_up_write;
-
-	error = incfs_write_data_block_to_backing_file(bfc,
-			range(data, block->data_len), block->block_index,
+	if (!error) {
+		error = incfs_write_data_block_to_backing_file(
+			bfc, range(data, block->data_len), block->block_index,
 			df->df_blockmap_off, flags);
-	if (error)
-		goto out_mutex_unlock;
-
-	if (atomic_inc_return(&df->df_data_blocks_written)
-			>= df->df_data_block_count)
-		*complete = true;
-
-out_mutex_unlock:
-	mutex_unlock(&bfc->bc_mutex);
+		mutex_unlock(&bfc->bc_mutex);
+	}
 	if (!error)
 		notify_pending_reads(mi, segment, block->block_index);
-
-out_up_write:
-	up_write(&segment->rwsem);
 
 unlock:
 	mutex_unlock(&segment->blockmap_mutex);
