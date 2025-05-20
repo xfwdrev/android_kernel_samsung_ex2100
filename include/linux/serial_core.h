@@ -17,7 +17,6 @@
 #include <linux/tty.h>
 #include <linux/mutex.h>
 #include <linux/sysrq.h>
-#include <linux/android_kabi.h>
 #include <uapi/linux/serial_core.h>
 
 #ifdef CONFIG_SERIAL_CORE_CONSOLE
@@ -80,9 +79,6 @@ struct uart_ops {
 	void		(*poll_put_char)(struct uart_port *, unsigned char);
 	int		(*poll_get_char)(struct uart_port *);
 #endif
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 #define NO_POLL_CHAR		0x00ff0000
@@ -257,9 +253,6 @@ struct uart_port {
 	struct serial_rs485     rs485;
 	struct serial_iso7816   iso7816;
 	void			*private_data;		/* generic platform data pointer */
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 static inline int serial_port_in(struct uart_port *up, int offset)
@@ -298,7 +291,7 @@ struct uart_state {
 	struct uart_port	*uart_port;
 };
 
-#define UART_XMIT_SIZE	PAGE_SIZE
+#define UART_XMIT_SIZE	(PAGE_SIZE * 4)
 
 
 /* number of characters left in xmit buffer before we ask for more */
@@ -339,8 +332,6 @@ struct uart_driver {
 	 */
 	struct uart_state	*state;
 	struct tty_driver	*tty_driver;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 void uart_write_wakeup(struct uart_port *port);

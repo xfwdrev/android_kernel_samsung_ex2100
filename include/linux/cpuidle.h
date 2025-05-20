@@ -14,7 +14,6 @@
 #include <linux/percpu.h>
 #include <linux/list.h>
 #include <linux/hrtimer.h>
-#include <linux/android_kabi.h>
 
 #define CPUIDLE_STATE_MAX	10
 #define CPUIDLE_NAME_LEN	16
@@ -102,8 +101,6 @@ struct cpuidle_device {
 	cpumask_t		coupled_cpus;
 	struct cpuidle_coupled	*coupled;
 #endif
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 DECLARE_PER_CPU(struct cpuidle_device *, cpuidle_devices);
@@ -130,8 +127,6 @@ struct cpuidle_driver {
 
 	/* preferred governor to switch at register time */
 	const char		*governor;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 #ifdef CONFIG_CPU_IDLE
@@ -169,6 +164,10 @@ extern int cpuidle_play_dead(void);
 extern struct cpuidle_driver *cpuidle_get_cpu_driver(struct cpuidle_device *dev);
 static inline struct cpuidle_device *cpuidle_get_device(void)
 {return __this_cpu_read(cpuidle_devices); }
+
+extern int cpuidle_profile_init(void);
+extern void cpuidle_profile_idle_begin(int idx);
+extern void cpuidle_profile_idle_end(int cancel);
 #else
 static inline void disable_cpuidle(void) { }
 static inline bool cpuidle_not_available(struct cpuidle_driver *drv,
@@ -208,6 +207,10 @@ static inline int cpuidle_play_dead(void) {return -ENODEV; }
 static inline struct cpuidle_driver *cpuidle_get_cpu_driver(
 	struct cpuidle_device *dev) {return NULL; }
 static inline struct cpuidle_device *cpuidle_get_device(void) {return NULL; }
+
+static inline int cpuidle_profile_init(void) { return 0; }
+static inline void cpuidle_profile_idle_begin(int idx) { }
+static inline void cpuidle_profile_idle_end(int cancel) { }
 #endif
 
 #ifdef CONFIG_CPU_IDLE
@@ -282,17 +285,28 @@ static inline int cpuidle_register_governor(struct cpuidle_governor *gov)
 	int __ret = 0;							\
 									\
 	if (!idx) {							\
+		cpuidle_profile_idle_begin(0);				\
 		cpu_do_idle();						\
+		cpuidle_profile_idle_end(0);				\
 		return idx;						\
 	}								\
 									\
-	if (!is_retention)						\
+	if (!is_retention) {						\
 		__ret =  cpu_pm_enter();				\
-	if (!__ret) {							\
-		__ret = low_level_idle_enter(state);			\
-		if (!is_retention)					\
-			cpu_pm_exit();					\
+		if (__ret) {						\
+			cpuidle_profile_idle_begin(0);			\
+			cpu_do_idle();					\
+			cpuidle_profile_idle_end(0);			\
+			return 0;					\
+		}							\
 	}								\
+									\
+	cpuidle_profile_idle_begin(idx);				\
+	__ret = low_level_idle_enter(state);				\
+	if (!is_retention)						\
+		cpu_pm_exit();						\
+									\
+	cpuidle_profile_idle_end(__ret);				\
 									\
 	__ret ? -1 : idx;						\
 })

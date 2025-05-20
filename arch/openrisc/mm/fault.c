@@ -31,7 +31,7 @@ unsigned long pte_errors;	/* updated by do_page_fault() */
  */
 volatile pgd_t *current_pgd[NR_CPUS];
 
-extern void __noreturn die(char *, struct pt_regs *, long);
+extern void die(char *, struct pt_regs *, long);
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -50,7 +50,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long address,
 	struct vm_area_struct *vma;
 	int si_code;
 	vm_fault_t fault;
-	unsigned int flags = FAULT_FLAG_DEFAULT;
+	unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 
 	tsk = current;
 
@@ -161,7 +161,7 @@ good_area:
 
 	fault = handle_mm_fault(vma, address, flags);
 
-	if (fault_signal_pending(fault, regs))
+	if ((fault & VM_FAULT_RETRY) && fatal_signal_pending(current))
 		return;
 
 	if (unlikely(fault & VM_FAULT_ERROR)) {
@@ -181,6 +181,7 @@ good_area:
 		else
 			tsk->min_flt++;
 		if (fault & VM_FAULT_RETRY) {
+			flags &= ~FAULT_FLAG_ALLOW_RETRY;
 			flags |= FAULT_FLAG_TRIED;
 
 			 /* No need to up_read(&mm->mmap_sem) as we would
@@ -248,6 +249,8 @@ no_context:
 	printk(" at virtual address 0x%08lx\n", address);
 
 	die("Oops", regs, write_acc);
+
+	do_exit(SIGKILL);
 
 	/*
 	 * We ran out of memory, or some other thing happened to us that made

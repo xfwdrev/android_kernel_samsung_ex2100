@@ -12,7 +12,6 @@
 #include <linux/kthread.h>
 #include <linux/ktime.h>
 #include <linux/blk-mq.h>
-#include <linux/keyslot-manager.h>
 
 #include <trace/events/block.h>
 

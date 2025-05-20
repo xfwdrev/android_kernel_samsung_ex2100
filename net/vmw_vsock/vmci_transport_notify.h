@@ -11,6 +11,7 @@
 #include <linux/types.h>
 #include <linux/vmw_vmci_defs.h>
 #include <linux/vmw_vmci_api.h>
+#include <linux/vm_sockets.h>
 
 #include "vmci_transport.h"
 

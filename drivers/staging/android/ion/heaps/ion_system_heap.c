@@ -23,7 +23,12 @@
 static gfp_t high_order_gfp_flags = (GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN |
 				     __GFP_NORETRY) & ~__GFP_RECLAIM;
 static gfp_t low_order_gfp_flags  = GFP_HIGHUSER | __GFP_ZERO;
+#ifdef CONFIG_HUGEPAGE_POOL
+#include <linux/hugepage_pool.h>
+static const unsigned int orders[] = {HUGEPAGE_ORDER, 4, 0};
+#else
 static const unsigned int orders[] = {8, 4, 0};
+#endif
 
 static int order_to_index(unsigned int order)
 {
@@ -86,6 +91,11 @@ static struct page *alloc_largest_available(struct ion_system_heap *heap,
 		if (max_order < orders[i])
 			continue;
 
+#ifdef CONFIG_HUGEPAGE_POOL
+		if (orders[i] == HUGEPAGE_ORDER &&
+				!is_hugepage_allowed(current, orders[i], true, HPAGE_ION))
+			continue;
+#endif
 		page = alloc_buffer_page(heap, buffer, orders[i]);
 		if (!page)
 			continue;
@@ -167,7 +177,7 @@ static void ion_system_heap_free(struct ion_buffer *buffer)
 	if (!(buffer->private_flags & ION_PRIV_FLAG_SHRINKER_FREE))
 		ion_buffer_zero(buffer);
 
-	for_each_sg(table->sgl, sg, table->orig_nents, i)
+	for_each_sg(table->sgl, sg, table->nents, i)
 		free_buffer_page(sys_heap, buffer, sg_page(sg));
 	sg_free_table(table);
 	kfree(table);

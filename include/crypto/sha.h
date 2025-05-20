@@ -123,7 +123,7 @@ extern int crypto_sha512_finup(struct shash_desc *desc, const u8 *data,
  * For details see lib/crypto/sha256.c
  */
 
-static inline void sha256_init(struct sha256_state *sctx)
+static inline int sha256_init(struct sha256_state *sctx)
 {
 	sctx->state[0] = SHA256_H0;
 	sctx->state[1] = SHA256_H1;
@@ -134,12 +134,14 @@ static inline void sha256_init(struct sha256_state *sctx)
 	sctx->state[6] = SHA256_H6;
 	sctx->state[7] = SHA256_H7;
 	sctx->count = 0;
-}
-void sha256_update(struct sha256_state *sctx, const u8 *data, unsigned int len);
-void sha256_final(struct sha256_state *sctx, u8 *out);
-void sha256(const u8 *data, unsigned int len, u8 *out);
 
-static inline void sha224_init(struct sha256_state *sctx)
+	return 0;
+}
+extern int sha256_update(struct sha256_state *sctx, const u8 *input,
+			 unsigned int length);
+extern int sha256_final(struct sha256_state *sctx, u8 *hash);
+
+static inline int sha224_init(struct sha256_state *sctx)
 {
 	sctx->state[0] = SHA224_H0;
 	sctx->state[1] = SHA224_H1;
@@ -150,8 +152,11 @@ static inline void sha224_init(struct sha256_state *sctx)
 	sctx->state[6] = SHA224_H6;
 	sctx->state[7] = SHA224_H7;
 	sctx->count = 0;
+
+	return 0;
 }
-void sha224_update(struct sha256_state *sctx, const u8 *data, unsigned int len);
-void sha224_final(struct sha256_state *sctx, u8 *out);
+extern int sha224_update(struct sha256_state *sctx, const u8 *input,
+			 unsigned int length);
+extern int sha224_final(struct sha256_state *sctx, u8 *hash);
 
 #endif

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Ioctl to enable verity on a file
+ * fs/verity/enable.c: ioctl to enable verity on a file
  *
  * Copyright 2019 Google LLC
  */

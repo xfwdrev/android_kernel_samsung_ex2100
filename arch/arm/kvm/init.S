@@ -35,7 +35,6 @@
  */
 
 	.text
-	.arch_extension virt
 	.pushsection    .hyp.idmap.text,"ax"
 	.align 5
 __kvm_hyp_init:

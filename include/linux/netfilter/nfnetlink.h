@@ -4,7 +4,6 @@
 
 #include <linux/netlink.h>
 #include <linux/capability.h>
-#include <linux/android_kabi.h>
 #include <net/netlink.h>
 #include <uapi/linux/netfilter/nfnetlink.h>
 
@@ -23,8 +22,6 @@ struct nfnl_callback {
 			  struct netlink_ext_ack *extack);
 	const struct nla_policy *policy;	/* netlink attribute policy */
 	const u_int16_t attr_count;		/* number of nlattr's */
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 enum nfnl_abort_action {
@@ -44,8 +41,6 @@ struct nfnetlink_subsystem {
 		     enum nfnl_abort_action action);
 	void (*cleanup)(struct net *net);
 	bool (*valid_genid)(struct net *net, u32 genid);
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n);

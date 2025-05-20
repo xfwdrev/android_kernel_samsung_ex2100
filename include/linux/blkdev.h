@@ -27,7 +27,6 @@
 #include <linux/percpu-refcount.h>
 #include <linux/scatterlist.h>
 #include <linux/blkzoned.h>
-#include <linux/android_kabi.h>
 
 struct module;
 struct scsi_ioctl_command;
@@ -44,7 +43,7 @@ struct pr_ops;
 struct rq_qos;
 struct blk_queue_stats;
 struct blk_stat_callback;
-struct blk_keyslot_manager;
+struct keyslot_manager;
 
 #define BLKDEV_MIN_RQ	4
 #define BLKDEV_MAX_RQ	128	/* Default maximum */
@@ -233,11 +232,6 @@ struct request {
 	unsigned short nr_integrity_segments;
 #endif
 
-#ifdef CONFIG_BLK_INLINE_ENCRYPTION
-	struct bio_crypt_ctx *crypt_ctx;
-	struct blk_ksm_keyslot *crypt_keyslot;
-#endif
-
 	unsigned short write_hint;
 	unsigned short ioprio;
 
@@ -259,8 +253,6 @@ struct request {
 	 */
 	rq_end_io_fn *end_io;
 	void *end_io_data;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 static inline bool blk_op_is_scsi(unsigned int op)
@@ -364,8 +356,6 @@ struct queue_limits {
 	unsigned char		discard_misaligned;
 	unsigned char		raid_partial_stripes_expensive;
 	enum blk_zoned_model	zoned;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 typedef int (*report_zones_cb)(struct blk_zone *zone, unsigned int idx,
@@ -496,7 +486,7 @@ struct request_queue {
 
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
 	/* Inline crypto capabilities */
-	struct blk_keyslot_manager *ksm;
+	struct keyslot_manager *ksm;
 #endif
 
 	unsigned int		rq_timeout;
@@ -608,11 +598,6 @@ struct request_queue {
 
 #define BLK_MAX_WRITE_HINTS	5
 	u64			write_hints[BLK_MAX_WRITE_HINTS];
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 /* Keep blk_queue_flag_name[] in sync with the definitions below */
@@ -1604,12 +1589,6 @@ struct blk_integrity *bdev_get_integrity(struct block_device *bdev)
 	return blk_get_integrity(bdev->bd_disk);
 }
 
-static inline bool
-blk_integrity_queue_supports_integrity(struct request_queue *q)
-{
-	return q->integrity.profile;
-}
-
 static inline bool blk_integrity_rq(struct request *rq)
 {
 	return rq->cmd_flags & REQ_INTEGRITY;
@@ -1690,11 +1669,6 @@ static inline struct blk_integrity *blk_get_integrity(struct gendisk *disk)
 {
 	return NULL;
 }
-static inline bool
-blk_integrity_queue_supports_integrity(struct request_queue *q)
-{
-	return false;
-}
 static inline int blk_integrity_compare(struct gendisk *a, struct gendisk *b)
 {
 	return 0;
@@ -1746,25 +1720,6 @@ static inline struct bio_vec *rq_integrity_vec(struct request *rq)
 
 #endif /* CONFIG_BLK_DEV_INTEGRITY */
 
-#ifdef CONFIG_BLK_INLINE_ENCRYPTION
-
-bool blk_ksm_register(struct blk_keyslot_manager *ksm, struct request_queue *q);
-
-void blk_ksm_unregister(struct request_queue *q);
-
-#else /* CONFIG_BLK_INLINE_ENCRYPTION */
-
-static inline bool blk_ksm_register(struct blk_keyslot_manager *ksm,
-				    struct request_queue *q)
-{
-	return true;
-}
-
-static inline void blk_ksm_unregister(struct request_queue *q) { }
-
-#endif /* CONFIG_BLK_INLINE_ENCRYPTION */
-
-
 struct block_device_operations {
 	int (*open) (struct block_device *, fmode_t);
 	void (*release) (struct gendisk *, fmode_t);
@@ -1784,9 +1739,6 @@ struct block_device_operations {
 			unsigned int nr_zones, report_zones_cb cb, void *data);
 	struct module *owner;
 	const struct pr_ops *pr_ops;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 extern int __blkdev_driver_ioctl(struct block_device *, fmode_t, unsigned int,

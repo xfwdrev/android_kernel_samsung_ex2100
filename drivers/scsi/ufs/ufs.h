@@ -38,7 +38,6 @@
 
 #include <linux/mutex.h>
 #include <linux/types.h>
-#include <linux/android_kabi.h>
 #include <uapi/scsi/scsi_bsg_ufs.h>
 
 #define GENERAL_UPIU_REQUEST_SIZE (sizeof(struct utp_upiu_req))
@@ -116,6 +115,12 @@ enum {
 	UPIU_CMD_FLAGS_NONE	= 0x00,
 	UPIU_CMD_FLAGS_WRITE	= 0x20,
 	UPIU_CMD_FLAGS_READ	= 0x40,
+};
+
+/* UPIU Command Priority flags */
+enum {
+	UPIU_CMD_PRIO_NONE	= 0x00,
+	UPIU_CMD_PRIO_HIGH	= 0x04,
 };
 
 /* UPIU Task Attributes */
@@ -578,7 +583,6 @@ struct ufs_dev_info {
 	u32 d_wb_alloc_units;
 	bool b_rpm_dev_flush_capable;
 	u8 b_presrv_uspc_en;
-	ANDROID_KABI_RESERVE(1);
 };
 
 /**

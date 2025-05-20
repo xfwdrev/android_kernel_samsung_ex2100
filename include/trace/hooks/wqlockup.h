@@ -11,11 +11,13 @@
  * Following tracepoints are not exported in tracefs and provide a
  * mechanism for vendor modules to hook and extend functionality
  */
+#if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
 DECLARE_HOOK(android_vh_wq_lockup_pool,
 	TP_PROTO(int cpu, unsigned long pool_ts),
 	TP_ARGS(cpu, pool_ts));
-
-/* macro versions of hooks are no longer required */
+#else
+#define trace_android_vh_wq_lockup_pool(cpu, pool_ts)
+#endif
 
 #endif /* _TRACE_HOOK_WQLOCKUP_H */
 /* This part must be outside protection */

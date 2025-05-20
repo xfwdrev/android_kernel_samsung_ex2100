@@ -1122,7 +1122,9 @@ const char * const vmstat_text[] = {
 	"nr_shadow_call_stack_bytes",
 #endif
 	"nr_bounce",
+#if IS_ENABLED(CONFIG_ZSMALLOC)
 	"nr_zspages",
+#endif
 	"nr_free_cma",
 
 	/* enum numa_stat_item counters */
@@ -1251,7 +1253,7 @@ const char * const vmstat_text[] = {
 	"unevictable_pgs_cleared",
 	"unevictable_pgs_stranded",
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_GKI_OPT_FEATURES)
 	"thp_fault_alloc",
 	"thp_fault_fallback",
 	"thp_collapse_alloc",
@@ -1744,7 +1746,7 @@ static const struct seq_operations vmstat_op = {
 
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
-int sysctl_stat_interval __read_mostly = HZ;
+int sysctl_stat_interval __read_mostly = (10 * HZ);
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)

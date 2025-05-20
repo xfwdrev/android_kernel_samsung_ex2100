@@ -32,14 +32,6 @@ bool fscrypt_policies_equal(const union fscrypt_policy *policy1,
 	return !memcmp(policy1, policy2, fscrypt_policy_size(policy1));
 }
 
-static const union fscrypt_policy *
-fscrypt_get_dummy_policy(struct super_block *sb)
-{
-	if (!sb->s_cop->get_dummy_policy)
-		return NULL;
-	return sb->s_cop->get_dummy_policy(sb);
-}
-
 static bool fscrypt_valid_enc_modes(u32 contents_mode, u32 filenames_mode)
 {
 	if (contents_mode == FSCRYPT_MODE_AES_256_XTS &&
@@ -247,19 +239,18 @@ bool fscrypt_supported_policy(const union fscrypt_policy *policy_u,
 }
 
 /**
- * fscrypt_new_context() - create a new fscrypt_context
+ * fscrypt_new_context_from_policy() - create a new fscrypt_context from
+ *				       an fscrypt_policy
  * @ctx_u: output context
  * @policy_u: input policy
- * @nonce: nonce to use
  *
  * Create an fscrypt_context for an inode that is being assigned the given
- * encryption policy.  @nonce must be a new random nonce.
+ * encryption policy.  A new nonce is randomly generated.
  *
  * Return: the size of the new context in bytes.
  */
-static int fscrypt_new_context(union fscrypt_context *ctx_u,
-			       const union fscrypt_policy *policy_u,
-			       const u8 nonce[FSCRYPT_FILE_NONCE_SIZE])
+static int fscrypt_new_context_from_policy(union fscrypt_context *ctx_u,
+					   const union fscrypt_policy *policy_u)
 {
 	memset(ctx_u, 0, sizeof(*ctx_u));
 
@@ -277,8 +268,16 @@ static int fscrypt_new_context(union fscrypt_context *ctx_u,
 		memcpy(ctx->master_key_descriptor,
 		       policy->master_key_descriptor,
 		       sizeof(ctx->master_key_descriptor));
-		memcpy(ctx->nonce, nonce, FSCRYPT_FILE_NONCE_SIZE);
+		get_random_bytes(ctx->nonce, sizeof(ctx->nonce));
+
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+		BUILD_BUG_ON((sizeof(*ctx) - sizeof(ctx->knox_flags))
+				!= offsetof(struct fscrypt_context_v1, knox_flags));
+		ctx->knox_flags = 0;
+		return offsetof(struct fscrypt_context_v1, knox_flags);
+#else
 		return sizeof(*ctx);
+#endif
 	}
 	case FSCRYPT_POLICY_V2: {
 		const struct fscrypt_policy_v2 *policy = &policy_u->v2;
@@ -293,8 +292,16 @@ static int fscrypt_new_context(union fscrypt_context *ctx_u,
 		memcpy(ctx->master_key_identifier,
 		       policy->master_key_identifier,
 		       sizeof(ctx->master_key_identifier));
-		memcpy(ctx->nonce, nonce, FSCRYPT_FILE_NONCE_SIZE);
+		get_random_bytes(ctx->nonce, sizeof(ctx->nonce));
+
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+		BUILD_BUG_ON((sizeof(*ctx) - sizeof(ctx->knox_flags))
+				!= offsetof(struct fscrypt_context_v2, knox_flags));
+		ctx->knox_flags = 0;
+		return offsetof(struct fscrypt_context_v2, knox_flags);
+#else
 		return sizeof(*ctx);
+#endif
 	}
 	}
 	BUG();
@@ -369,7 +376,7 @@ static int fscrypt_get_policy(struct inode *inode, union fscrypt_policy *policy)
 	union fscrypt_context ctx;
 	int ret;
 
-	ci = fscrypt_get_info(inode);
+	ci = READ_ONCE(inode->i_crypt_info);
 	if (ci) {
 		/* key available, use the cached policy */
 		*policy = ci->ci_policy;
@@ -383,13 +390,31 @@ static int fscrypt_get_policy(struct inode *inode, union fscrypt_policy *policy)
 	if (ret < 0)
 		return (ret == -ERANGE) ? -EINVAL : ret;
 
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+	switch (ctx.version) {
+	case FSCRYPT_CONTEXT_V1: {
+		if (ret == offsetof(struct fscrypt_context_v1, knox_flags)) {
+			ctx.v1.knox_flags = 0;
+			ret = sizeof(ctx.v1);
+		}
+		break;
+	}
+	case FSCRYPT_CONTEXT_V2: {
+		if (ret == offsetof(struct fscrypt_context_v2, knox_flags)) {
+			ctx.v2.knox_flags = 0;
+			ret = sizeof(ctx.v2);
+		}
+		break;
+	}
+	}
+#endif
+
 	return fscrypt_policy_from_context(policy, &ctx, ret);
 }
 
 static int set_encryption_policy(struct inode *inode,
 				 const union fscrypt_policy *policy)
 {
-	u8 nonce[FSCRYPT_FILE_NONCE_SIZE];
 	union fscrypt_context ctx;
 	int ctxsize;
 	int err;
@@ -427,8 +452,7 @@ static int set_encryption_policy(struct inode *inode,
 		return -EINVAL;
 	}
 
-	get_random_bytes(nonce, FSCRYPT_FILE_NONCE_SIZE);
-	ctxsize = fscrypt_new_context(&ctx, policy, nonce);
+	ctxsize = fscrypt_new_context_from_policy(&ctx, policy);
 
 	return inode->i_sb->s_cop->set_context(inode, &ctx, ctxsize, NULL);
 }
@@ -559,6 +583,26 @@ int fscrypt_ioctl_get_nonce(struct file *filp, void __user *arg)
 	ret = inode->i_sb->s_cop->get_context(inode, &ctx, sizeof(ctx));
 	if (ret < 0)
 		return ret;
+
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+	switch (ctx.version) {
+	case FSCRYPT_CONTEXT_V1: {
+		if (ret == offsetof(struct fscrypt_context_v1, knox_flags)) {
+			ctx.v1.knox_flags = 0;
+			ret = sizeof(ctx.v1);
+		}
+		break;
+	}
+	case FSCRYPT_CONTEXT_V2: {
+		if (ret == offsetof(struct fscrypt_context_v2, knox_flags)) {
+			ctx.v2.knox_flags = 0;
+			ret = sizeof(ctx.v2);
+		}
+		break;
+	}
+	}
+#endif
+
 	if (!fscrypt_context_is_valid(&ctx, ret))
 		return -EINVAL;
 	if (copy_to_user(arg, fscrypt_context_nonce(&ctx),
@@ -590,7 +634,7 @@ EXPORT_SYMBOL_GPL(fscrypt_ioctl_get_nonce);
 int fscrypt_has_permitted_context(struct inode *parent, struct inode *child)
 {
 	union fscrypt_policy parent_policy, child_policy;
-	int err, err1, err2;
+	int err;
 
 	/* No restrictions on file types which are never encrypted */
 	if (!S_ISREG(child->i_mode) && !S_ISDIR(child->i_mode) &&
@@ -620,124 +664,137 @@ int fscrypt_has_permitted_context(struct inode *parent, struct inode *child)
 	 * In any case, if an unexpected error occurs, fall back to "forbidden".
 	 */
 
-	err = fscrypt_get_encryption_info(parent, true);
+	err = fscrypt_get_encryption_info(parent);
 	if (err)
 		return 0;
-	err = fscrypt_get_encryption_info(child, true);
+	err = fscrypt_get_encryption_info(child);
 	if (err)
 		return 0;
 
-	err1 = fscrypt_get_policy(parent, &parent_policy);
-	err2 = fscrypt_get_policy(child, &child_policy);
+	err = fscrypt_get_policy(parent, &parent_policy);
+	if (err)
+		return 0;
 
-	/*
-	 * Allow the case where the parent and child both have an unrecognized
-	 * encryption policy, so that files with an unrecognized encryption
-	 * policy can be deleted.
-	 */
-	if (err1 == -EINVAL && err2 == -EINVAL)
-		return 1;
-
-	if (err1 || err2)
+	err = fscrypt_get_policy(child, &child_policy);
+	if (err)
 		return 0;
 
 	return fscrypt_policies_equal(&parent_policy, &child_policy);
 }
 EXPORT_SYMBOL(fscrypt_has_permitted_context);
 
-/*
- * Return the encryption policy that new files in the directory will inherit, or
- * NULL if none, or an ERR_PTR() on error.  If the directory is encrypted, also
- * ensure that its key is set up, so that the new filename can be encrypted.
- */
-const union fscrypt_policy *fscrypt_policy_to_inherit(struct inode *dir)
-{
-	int err;
-
-	if (IS_ENCRYPTED(dir)) {
-		err = fscrypt_require_key(dir);
-		if (err)
-			return ERR_PTR(err);
-		return &dir->i_crypt_info->ci_policy;
-	}
-
-	return fscrypt_get_dummy_policy(dir->i_sb);
-}
-
 /**
- * fscrypt_set_context() - Set the fscrypt context of a new inode
- * @inode: a new inode
- * @fs_data: private data given by FS and passed to ->set_context()
- *
- * This should be called after fscrypt_prepare_new_inode(), generally during a
- * filesystem transaction.  Everything here must be %GFP_NOFS-safe.
+ * fscrypt_inherit_context() - Sets a child context from its parent
+ * @parent: Parent inode from which the context is inherited.
+ * @child:  Child inode that inherits the context from @parent.
+ * @fs_data:  private data given by FS.
+ * @preload:  preload child i_crypt_info if true
  *
  * Return: 0 on success, -errno on failure
  */
-int fscrypt_set_context(struct inode *inode, void *fs_data)
+int fscrypt_inherit_context(struct inode *parent, struct inode *child,
+						void *fs_data, bool preload)
 {
-	struct fscrypt_info *ci = inode->i_crypt_info;
 	union fscrypt_context ctx;
 	int ctxsize;
+	struct fscrypt_info *ci;
+	int res;
 
-	/* fscrypt_prepare_new_inode() should have set up the key already. */
-	if (WARN_ON_ONCE(!ci))
+	res = fscrypt_get_encryption_info(parent);
+	if (res < 0)
+		return res;
+
+	ci = READ_ONCE(parent->i_crypt_info);
+	if (ci == NULL)
 		return -ENOKEY;
 
+	ctxsize = fscrypt_new_context_from_policy(&ctx, &ci->ci_policy);
+
 	BUILD_BUG_ON(sizeof(ctx) != FSCRYPT_SET_CONTEXT_MAX_SIZE);
-	ctxsize = fscrypt_new_context(&ctx, &ci->ci_policy, ci->ci_nonce);
 
-	/*
-	 * This may be the first time the inode number is available, so do any
-	 * delayed key setup that requires the inode number.
-	 */
-	if (ci->ci_policy.version == FSCRYPT_POLICY_V2 &&
-	    (ci->ci_policy.v2.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32)) {
-		const struct fscrypt_master_key *mk =
-			ci->ci_master_key->payload.data[0];
-
-		fscrypt_hash_inode_number(ci, mk);
+#ifdef CONFIG_DDAR
+	res = dd_test_and_inherit_context(&ctx, parent, child, ci, fs_data);
+	if (res) {
+		dd_error("failed to inherit dd policy\n");
+		return res;
 	}
+#endif
 
-	return inode->i_sb->s_cop->set_context(inode, &ctx, ctxsize, fs_data);
+#ifdef CONFIG_FSCRYPT_SDP
+	res = fscrypt_sdp_inherit_context(parent, child, &ctx, fs_data);
+	if (res) {
+		printk_once(KERN_WARNING
+				"%s: Failed to set sensitive ongoing flag (err:%d)\n", __func__, res);
+		return res;
+	}
+#endif
+
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+	switch (ctx.version) {
+	case FSCRYPT_CONTEXT_V1: {
+		if (ctx.v1.knox_flags != 0)
+			ctxsize = sizeof(ctx.v1);
+		break;
+	}
+	case FSCRYPT_CONTEXT_V2: {
+		if (ctx.v2.knox_flags != 0)
+			ctxsize = sizeof(ctx.v2);
+		break;
+	}
+	}
+#endif
+	res = parent->i_sb->s_cop->set_context(child, &ctx, ctxsize, fs_data);
+	if (res)
+		return res;
+	return preload ? fscrypt_get_encryption_info(child): 0;
 }
-EXPORT_SYMBOL_GPL(fscrypt_set_context);
+EXPORT_SYMBOL(fscrypt_inherit_context);
 
 /**
  * fscrypt_set_test_dummy_encryption() - handle '-o test_dummy_encryption'
  * @sb: the filesystem on which test_dummy_encryption is being specified
- * @arg: the argument to the test_dummy_encryption option.  May be NULL.
- * @dummy_policy: the filesystem's current dummy policy (input/output, see
- *		  below)
+ * @arg: the argument to the test_dummy_encryption option.
+ *	 If no argument was specified, then @arg->from == NULL.
+ * @dummy_ctx: the filesystem's current dummy context (input/output, see below)
  *
  * Handle the test_dummy_encryption mount option by creating a dummy encryption
- * policy, saving it in @dummy_policy, and adding the corresponding dummy
- * encryption key to the filesystem.  If the @dummy_policy is already set, then
+ * context, saving it in @dummy_ctx, and adding the corresponding dummy
+ * encryption key to the filesystem.  If the @dummy_ctx is already set, then
  * instead validate that it matches @arg.  Don't support changing it via
  * remount, as that is difficult to do safely.
  *
- * Return: 0 on success (dummy policy set, or the same policy is already set);
- *         -EEXIST if a different dummy policy is already set;
+ * The reason we use an fscrypt_context rather than an fscrypt_policy is because
+ * we mustn't generate a new nonce each time we access a dummy-encrypted
+ * directory, as that would change the way filenames are encrypted.
+ *
+ * Return: 0 on success (dummy context set, or the same context is already set);
+ *         -EEXIST if a different dummy context is already set;
  *         or another -errno value.
  */
-int fscrypt_set_test_dummy_encryption(struct super_block *sb, const char *arg,
-				      struct fscrypt_dummy_policy *dummy_policy)
+int fscrypt_set_test_dummy_encryption(struct super_block *sb,
+				      const substring_t *arg,
+				      struct fscrypt_dummy_context *dummy_ctx)
 {
+	const char *argstr = "v2";
+	const char *argstr_to_free = NULL;
 	struct fscrypt_key_specifier key_spec = { 0 };
 	int version;
-	union fscrypt_policy *policy = NULL;
+	union fscrypt_context *ctx = NULL;
 	int err;
 
-	if (!arg)
-		arg = "v2";
+	if (arg->from) {
+		argstr = argstr_to_free = match_strdup(arg);
+		if (!argstr)
+			return -ENOMEM;
+	}
 
-	if (!strcmp(arg, "v1")) {
-		version = FSCRYPT_POLICY_V1;
+	if (!strcmp(argstr, "v1")) {
+		version = FSCRYPT_CONTEXT_V1;
 		key_spec.type = FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR;
 		memset(key_spec.u.descriptor, 0x42,
 		       FSCRYPT_KEY_DESCRIPTOR_SIZE);
-	} else if (!strcmp(arg, "v2")) {
-		version = FSCRYPT_POLICY_V2;
+	} else if (!strcmp(argstr, "v2")) {
+		version = FSCRYPT_CONTEXT_V2;
 		key_spec.type = FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER;
 		/* key_spec.u.identifier gets filled in when adding the key */
 	} else {
@@ -745,8 +802,21 @@ int fscrypt_set_test_dummy_encryption(struct super_block *sb, const char *arg,
 		goto out;
 	}
 
-	policy = kzalloc(sizeof(*policy), GFP_KERNEL);
-	if (!policy) {
+	if (dummy_ctx->ctx) {
+		/*
+		 * Note: if we ever make test_dummy_encryption support
+		 * specifying other encryption settings, such as the encryption
+		 * modes, we'll need to compare those settings here.
+		 */
+		if (dummy_ctx->ctx->version == version)
+			err = 0;
+		else
+			err = -EEXIST;
+		goto out;
+	}
+
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx) {
 		err = -ENOMEM;
 		goto out;
 	}
@@ -755,18 +825,18 @@ int fscrypt_set_test_dummy_encryption(struct super_block *sb, const char *arg,
 	if (err)
 		goto out;
 
-	policy->version = version;
-	switch (policy->version) {
-	case FSCRYPT_POLICY_V1:
-		policy->v1.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
-		policy->v1.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
-		memcpy(policy->v1.master_key_descriptor, key_spec.u.descriptor,
+	ctx->version = version;
+	switch (ctx->version) {
+	case FSCRYPT_CONTEXT_V1:
+		ctx->v1.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+		ctx->v1.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+		memcpy(ctx->v1.master_key_descriptor, key_spec.u.descriptor,
 		       FSCRYPT_KEY_DESCRIPTOR_SIZE);
 		break;
-	case FSCRYPT_POLICY_V2:
-		policy->v2.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
-		policy->v2.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
-		memcpy(policy->v2.master_key_identifier, key_spec.u.identifier,
+	case FSCRYPT_CONTEXT_V2:
+		ctx->v2.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+		ctx->v2.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+		memcpy(ctx->v2.master_key_identifier, key_spec.u.identifier,
 		       FSCRYPT_KEY_IDENTIFIER_SIZE);
 		break;
 	default:
@@ -774,19 +844,12 @@ int fscrypt_set_test_dummy_encryption(struct super_block *sb, const char *arg,
 		err = -EINVAL;
 		goto out;
 	}
-
-	if (dummy_policy->policy) {
-		if (fscrypt_policies_equal(policy, dummy_policy->policy))
-			err = 0;
-		else
-			err = -EEXIST;
-		goto out;
-	}
-	dummy_policy->policy = policy;
-	policy = NULL;
+	dummy_ctx->ctx = ctx;
+	ctx = NULL;
 	err = 0;
 out:
-	kfree(policy);
+	kfree(ctx);
+	kfree(argstr_to_free);
 	return err;
 }
 EXPORT_SYMBOL_GPL(fscrypt_set_test_dummy_encryption);
@@ -803,16 +866,10 @@ EXPORT_SYMBOL_GPL(fscrypt_set_test_dummy_encryption);
 void fscrypt_show_test_dummy_encryption(struct seq_file *seq, char sep,
 					struct super_block *sb)
 {
-	const union fscrypt_policy *policy = fscrypt_get_dummy_policy(sb);
-	int vers;
+	const union fscrypt_context *ctx = fscrypt_get_dummy_context(sb);
 
-	if (!policy)
+	if (!ctx)
 		return;
-
-	vers = policy->version;
-	if (vers == FSCRYPT_POLICY_V1) /* Handle numbering quirk */
-		vers = 1;
-
-	seq_printf(seq, "%ctest_dummy_encryption=v%d", sep, vers);
+	seq_printf(seq, "%ctest_dummy_encryption=v%d", sep, ctx->version);
 }
 EXPORT_SYMBOL_GPL(fscrypt_show_test_dummy_encryption);

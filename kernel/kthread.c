@@ -9,6 +9,7 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/sched.h>
 #include <linux/sched/task.h>
+#include <linux/sched/wake_q.h>
 #include <linux/kthread.h>
 #include <linux/completion.h>
 #include <linux/err.h>
@@ -23,6 +24,7 @@
 #include <linux/ptrace.h>
 #include <linux/uaccess.h>
 #include <linux/numa.h>
+#include <linux/sec_debug.h>
 #include <trace/events/sched.h>
 
 static DEFINE_SPINLOCK(kthread_create_lock);
@@ -350,20 +352,25 @@ struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 	 * the OOM killer while kthreadd is trying to allocate memory for
 	 * new kernel thread.
 	 */
+	secdbg_dtsk_built_set_data(DTYPE_KTHREAD, kthreadd_task);
 	if (unlikely(wait_for_completion_killable(&done))) {
 		/*
 		 * If I was SIGKILLed before kthreadd (or new kernel thread)
 		 * calls complete(), leave the cleanup of this structure to
 		 * that thread.
 		 */
-		if (xchg(&create->done, NULL))
+		if (xchg(&create->done, NULL)) {
+			secdbg_dtsk_built_clear_data();
 			return ERR_PTR(-EINTR);
+		}
 		/*
 		 * kthreadd (or new kernel thread) will call complete()
 		 * shortly.
 		 */
 		wait_for_completion(&done);
 	}
+	secdbg_dtsk_built_clear_data();
+
 	task = create->result;
 	if (!IS_ERR(task)) {
 		static const struct sched_param param = { .sched_priority = 0 };
@@ -614,7 +621,9 @@ int kthread_stop(struct task_struct *k)
 	set_bit(KTHREAD_SHOULD_STOP, &kthread->flags);
 	kthread_unpark(k);
 	wake_up_process(k);
+	secdbg_dtsk_built_set_data(DTYPE_KTHREAD, k);
 	wait_for_completion(&kthread->exited);
+	secdbg_dtsk_built_clear_data();
 	ret = k->exit_code;
 	put_task_struct(k);
 
@@ -851,14 +860,15 @@ static void kthread_insert_work_sanity_check(struct kthread_worker *worker,
 /* insert @work before @pos in @worker */
 static void kthread_insert_work(struct kthread_worker *worker,
 				struct kthread_work *work,
-				struct list_head *pos)
+				struct list_head *pos,
+				struct wake_q_head *wake_q)
 {
 	kthread_insert_work_sanity_check(worker, work);
 
 	list_add_tail(&work->node, pos);
 	work->worker = worker;
 	if (!worker->current_work && likely(worker->task))
-		wake_up_process(worker->task);
+		wake_q_add(wake_q, worker->task);
 }
 
 /**
@@ -876,15 +886,19 @@ static void kthread_insert_work(struct kthread_worker *worker,
 bool kthread_queue_work(struct kthread_worker *worker,
 			struct kthread_work *work)
 {
-	bool ret = false;
+	DEFINE_WAKE_Q(wake_q);
 	unsigned long flags;
+	bool ret = false;
 
 	raw_spin_lock_irqsave(&worker->lock, flags);
 	if (!queuing_blocked(worker, work)) {
-		kthread_insert_work(worker, work, &worker->work_list);
+		kthread_insert_work(worker, work, &worker->work_list, &wake_q);
 		ret = true;
 	}
 	raw_spin_unlock_irqrestore(&worker->lock, flags);
+
+	wake_up_q(&wake_q);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(kthread_queue_work);
@@ -902,6 +916,7 @@ void kthread_delayed_work_timer_fn(struct timer_list *t)
 	struct kthread_delayed_work *dwork = from_timer(dwork, t, timer);
 	struct kthread_work *work = &dwork->work;
 	struct kthread_worker *worker = work->worker;
+	DEFINE_WAKE_Q(wake_q);
 	unsigned long flags;
 
 	/*
@@ -919,15 +934,18 @@ void kthread_delayed_work_timer_fn(struct timer_list *t)
 	WARN_ON_ONCE(list_empty(&work->node));
 	list_del_init(&work->node);
 	if (!work->canceling)
-		kthread_insert_work(worker, work, &worker->work_list);
+		kthread_insert_work(worker, work, &worker->work_list, &wake_q);
 
 	raw_spin_unlock_irqrestore(&worker->lock, flags);
+
+	wake_up_q(&wake_q);
 }
 EXPORT_SYMBOL(kthread_delayed_work_timer_fn);
 
 static void __kthread_queue_delayed_work(struct kthread_worker *worker,
 					 struct kthread_delayed_work *dwork,
-					 unsigned long delay)
+					 unsigned long delay,
+					 struct wake_q_head *wake_q)
 {
 	struct timer_list *timer = &dwork->timer;
 	struct kthread_work *work = &dwork->work;
@@ -943,7 +961,7 @@ static void __kthread_queue_delayed_work(struct kthread_worker *worker,
 	 * on that there's no such delay when @delay is 0.
 	 */
 	if (!delay) {
-		kthread_insert_work(worker, work, &worker->work_list);
+		kthread_insert_work(worker, work, &worker->work_list, wake_q);
 		return;
 	}
 
@@ -976,17 +994,21 @@ bool kthread_queue_delayed_work(struct kthread_worker *worker,
 				unsigned long delay)
 {
 	struct kthread_work *work = &dwork->work;
+	DEFINE_WAKE_Q(wake_q);
 	unsigned long flags;
 	bool ret = false;
 
 	raw_spin_lock_irqsave(&worker->lock, flags);
 
 	if (!queuing_blocked(worker, work)) {
-		__kthread_queue_delayed_work(worker, dwork, delay);
+		__kthread_queue_delayed_work(worker, dwork, delay, &wake_q);
 		ret = true;
 	}
 
 	raw_spin_unlock_irqrestore(&worker->lock, flags);
+
+	wake_up_q(&wake_q);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(kthread_queue_delayed_work);
@@ -1015,6 +1037,7 @@ void kthread_flush_work(struct kthread_work *work)
 		KTHREAD_WORK_INIT(fwork.work, kthread_flush_work_fn),
 		COMPLETION_INITIALIZER_ONSTACK(fwork.done),
 	};
+	DEFINE_WAKE_Q(wake_q);
 	struct kthread_worker *worker;
 	bool noop = false;
 
@@ -1027,14 +1050,17 @@ void kthread_flush_work(struct kthread_work *work)
 	WARN_ON_ONCE(work->worker != worker);
 
 	if (!list_empty(&work->node))
-		kthread_insert_work(worker, &fwork.work, work->node.next);
+		kthread_insert_work(worker, &fwork.work,
+				    work->node.next, &wake_q);
 	else if (worker->current_work == work)
 		kthread_insert_work(worker, &fwork.work,
-				    worker->work_list.next);
+				    worker->work_list.next, &wake_q);
 	else
 		noop = true;
 
 	raw_spin_unlock_irq(&worker->lock);
+
+	wake_up_q(&wake_q);
 
 	if (!noop)
 		wait_for_completion(&fwork.done);
@@ -1123,6 +1149,7 @@ bool kthread_mod_delayed_work(struct kthread_worker *worker,
 			      unsigned long delay)
 {
 	struct kthread_work *work = &dwork->work;
+	DEFINE_WAKE_Q(wake_q);
 	unsigned long flags;
 	int ret;
 
@@ -1158,9 +1185,12 @@ bool kthread_mod_delayed_work(struct kthread_worker *worker,
 	ret = __kthread_cancel_work(work);
 
 fast_queue:
-	__kthread_queue_delayed_work(worker, dwork, delay);
+	__kthread_queue_delayed_work(worker, dwork, delay, &wake_q);
 out:
 	raw_spin_unlock_irqrestore(&worker->lock, flags);
+
+	wake_up_q(&wake_q);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(kthread_mod_delayed_work);

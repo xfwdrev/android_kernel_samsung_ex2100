@@ -61,9 +61,11 @@ void end_swap_bio_write(struct bio *bio)
 		 * Also clear PG_reclaim to avoid rotate_reclaimable_page()
 		 */
 		set_page_dirty(page);
+#ifndef CONFIG_ZRAM
 		pr_alert("Write-error on swap-device (%u:%u:%llu)\n",
 			 MAJOR(bio_dev(bio)), MINOR(bio_dev(bio)),
 			 (unsigned long long)bio->bi_iter.bi_sector);
+#endif
 		ClearPageReclaim(page);
 	}
 	end_page_writeback(page);
@@ -128,9 +130,8 @@ int generic_swapfile_activate(struct swap_info_struct *sis,
 
 		cond_resched();
 
-		first_block = probe_block;
-		ret = bmap(inode, &first_block);
-		if (ret || !first_block)
+		first_block = bmap(inode, probe_block);
+		if (first_block == 0)
 			goto bad_bmap;
 
 		/*
@@ -145,11 +146,9 @@ int generic_swapfile_activate(struct swap_info_struct *sis,
 					block_in_page++) {
 			sector_t block;
 
-			block = probe_block + block_in_page;
-			ret = bmap(inode, &block);
-			if (ret || !block)
+			block = bmap(inode, probe_block + block_in_page);
+			if (block == 0)
 				goto bad_bmap;
-
 			if (block != first_block + block_in_page) {
 				/* Discontiguity */
 				probe_block++;

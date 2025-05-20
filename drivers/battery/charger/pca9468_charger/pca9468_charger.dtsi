@@ -1,0 +1,24 @@
+&hsi2c_2 {
+	status = "okay";
+
+	pca9468_charger: pca9468@57 {
+		compatible = "nxp,pca9468";
+		reg = <0x57>;
+
+
+		pca9468,input-current-limit = <2550000>; /* 2.55A */
+		pca9468,charging-current = <6000000>; /* 6A */
+		pca9468,input-itopoff = <500000>; /* 500mA */
+		pca9468,sense-resistance = <0>; /* 5mOhm */
+		pca9468,switching-frequency = <3>; /* 980KHz */
+		pca9468,ntc-threshold = <0>; /* disable */
+		pca9468,ta-mode = <1>; /* 2:1 charging mode */
+		pca9468,ta-max-vol = <10500000>; /* 10.5V */
+	};
+};
+
+/* /home/dpi/qb5_8814/workspace/P4_1716/android/kernel/kmodule/battery/charger/pca9468_charger_gki/pca9468_charger.t2s.dtsi */
+
+&pca9468_charger {
+		pca9468,input-itopoff = <400000>; /* 400mA */
+};

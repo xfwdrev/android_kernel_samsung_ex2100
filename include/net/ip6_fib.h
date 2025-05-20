@@ -13,7 +13,6 @@
 #include <linux/rtnetlink.h>
 #include <linux/spinlock.h>
 #include <linux/notifier.h>
-#include <linux/android_kabi.h>
 #include <net/dst.h>
 #include <net/flow.h>
 #include <net/ip_fib.h>
@@ -66,8 +65,6 @@ struct fib6_config {
 	struct nl_info	fc_nlinfo;
 	struct nlattr	*fc_encap;
 	u16		fc_encap_type;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 struct fib6_node {
@@ -84,8 +81,6 @@ struct fib6_node {
 	int			fn_sernum;
 	struct fib6_info __rcu	*rr_ptr;
 	struct rcu_head		rcu;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 struct fib6_gc_args {
@@ -176,9 +171,6 @@ struct fib6_info {
 
 	struct rcu_head			rcu;
 	struct nexthop			*nh;
-
-	ANDROID_KABI_RESERVE(1);
-
 	struct fib6_nh			fib6_nh[0];
 };
 
@@ -198,8 +190,6 @@ struct rt6_info {
 
 	/* more non-fragment space at head required */
 	unsigned short			rt6i_nfheader_len;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 struct fib6_result {

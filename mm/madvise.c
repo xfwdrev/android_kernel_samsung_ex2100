@@ -17,7 +17,6 @@
 #include <linux/falloc.h>
 #include <linux/fadvise.h>
 #include <linux/sched.h>
-#include <linux/sched/mm.h>
 #include <linux/ksm.h>
 #include <linux/fs.h>
 #include <linux/file.h>
@@ -28,7 +27,7 @@
 #include <linux/swapops.h>
 #include <linux/shmem_fs.h>
 #include <linux/mmu_notifier.h>
-#include <linux/uio.h>
+
 #include <asm/tlb.h>
 
 #include "internal.h"
@@ -167,8 +166,9 @@ success:
 	/*
 	 * vm_flags is protected by the mmap_sem held in write mode.
 	 */
-	vma->vm_flags = new_flags;
-
+	vm_write_begin(vma);
+	WRITE_ONCE(vma->vm_flags, new_flags);
+	vm_write_end(vma);
 out_convert_errno:
 	/*
 	 * madvise() returns EAGAIN if kernel resources, such as
@@ -255,7 +255,6 @@ static long madvise_willneed(struct vm_area_struct *vma,
 			     struct vm_area_struct **prev,
 			     unsigned long start, unsigned long end)
 {
-	struct mm_struct *mm = vma->vm_mm;
 	struct file *file = vma->vm_file;
 	loff_t offset;
 
@@ -292,10 +291,10 @@ static long madvise_willneed(struct vm_area_struct *vma,
 	get_file(file);
 	offset = (loff_t)(start - vma->vm_start)
 			+ ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
-	up_read(&mm->mmap_sem);
+	up_read(&current->mm->mmap_sem);
 	vfs_fadvise(file, offset, end - start, POSIX_FADV_WILLNEED);
 	fput(file);
-	down_read(&mm->mmap_sem);
+	down_read(&current->mm->mmap_sem);
 	return 0;
 }
 
@@ -488,9 +487,11 @@ static void madvise_cold_page_range(struct mmu_gather *tlb,
 		.tlb = tlb,
 	};
 
+	vm_write_begin(vma);
 	tlb_start_vma(tlb, vma);
 	walk_page_range(vma->vm_mm, addr, end, &cold_walk_ops, &walk_private);
 	tlb_end_vma(tlb, vma);
+	vm_write_end(vma);
 }
 
 static long madvise_cold(struct vm_area_struct *vma,
@@ -521,9 +522,11 @@ static void madvise_pageout_page_range(struct mmu_gather *tlb,
 		.tlb = tlb,
 	};
 
+	vm_write_begin(vma);
 	tlb_start_vma(tlb, vma);
 	walk_page_range(vma->vm_mm, addr, end, &cold_walk_ops, &walk_private);
 	tlb_end_vma(tlb, vma);
+	vm_write_end(vma);
 }
 
 static inline bool can_do_pageout(struct vm_area_struct *vma)
@@ -726,10 +729,12 @@ static int madvise_free_single_vma(struct vm_area_struct *vma,
 	update_hiwater_rss(mm);
 
 	mmu_notifier_invalidate_range_start(&range);
+	vm_write_begin(vma);
 	tlb_start_vma(&tlb, vma);
 	walk_page_range(vma->vm_mm, range.start, range.end,
 			&madvise_free_walk_ops, &tlb);
 	tlb_end_vma(&tlb, vma);
+	vm_write_end(vma);
 	mmu_notifier_invalidate_range_end(&range);
 	tlb_finish_mmu(&tlb, range.start, range.end);
 
@@ -767,8 +772,6 @@ static long madvise_dontneed_free(struct vm_area_struct *vma,
 				  unsigned long start, unsigned long end,
 				  int behavior)
 {
-	struct mm_struct *mm = vma->vm_mm;
-
 	*prev = vma;
 	if (!can_madv_lru_vma(vma))
 		return -EINVAL;
@@ -776,8 +779,8 @@ static long madvise_dontneed_free(struct vm_area_struct *vma,
 	if (!userfaultfd_remove(vma, start, end)) {
 		*prev = NULL; /* mmap_sem has been dropped, prev is stale */
 
-		down_read(&mm->mmap_sem);
-		vma = find_vma(mm, start);
+		down_read(&current->mm->mmap_sem);
+		vma = find_vma(current->mm, start);
 		if (!vma)
 			return -ENOMEM;
 		if (start < vma->vm_start) {
@@ -831,7 +834,6 @@ static long madvise_remove(struct vm_area_struct *vma,
 	loff_t offset;
 	int error;
 	struct file *f;
-	struct mm_struct *mm = vma->vm_mm;
 
 	*prev = NULL;	/* tell sys_madvise we drop mmap_sem */
 
@@ -859,13 +861,13 @@ static long madvise_remove(struct vm_area_struct *vma,
 	get_file(f);
 	if (userfaultfd_remove(vma, start, end)) {
 		/* mmap_sem was not released by userfaultfd_remove() */
-		up_read(&mm->mmap_sem);
+		up_read(&current->mm->mmap_sem);
 	}
 	error = vfs_fallocate(f,
 				FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
 				offset, end - start);
 	fput(f);
-	down_read(&mm->mmap_sem);
+	down_read(&current->mm->mmap_sem);
 	return error;
 }
 
@@ -997,18 +999,6 @@ madvise_behavior_valid(int behavior)
 	}
 }
 
-static bool
-process_madvise_behavior_valid(int behavior)
-{
-	switch (behavior) {
-	case MADV_COLD:
-	case MADV_PAGEOUT:
-		return true;
-	default:
-		return false;
-	}
-}
-
 /*
  * The madvise(2) system call.
  *
@@ -1056,11 +1046,6 @@ process_madvise_behavior_valid(int behavior)
  *  MADV_DONTDUMP - the application wants to prevent pages in the given range
  *		from being included in its core dump.
  *  MADV_DODUMP - cancel MADV_DONTDUMP: no longer exclude from core dump.
- *  MADV_COLD - the application is not expected to use this memory soon,
- *		deactivate pages in this range so that they can be reclaimed
- *		easily if memory pressure hanppens.
- *  MADV_PAGEOUT - the application is not expected to use this memory soon,
- *		page out the pages in this range immediately.
  *
  * return values:
  *  zero    - success
@@ -1075,7 +1060,7 @@ process_madvise_behavior_valid(int behavior)
  *  -EBADF  - map exists, but area maps something that isn't a file.
  *  -EAGAIN - a kernel resource was temporarily unavailable.
  */
-int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int behavior)
+SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 {
 	unsigned long end, tmp;
 	struct vm_area_struct *vma, *prev;
@@ -1113,27 +1098,10 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 
 	write = madvise_need_mmap_write(behavior);
 	if (write) {
-		if (down_write_killable(&mm->mmap_sem))
+		if (down_write_killable(&current->mm->mmap_sem))
 			return -EINTR;
-
-		/*
-		 * We may have stolen the mm from another process
-		 * that is undergoing core dumping.
-		 *
-		 * Right now that's io_ring, in the future it may
-		 * be remote process management and not "current"
-		 * at all.
-		 *
-		 * We need to fix core dumping to not do this,
-		 * but for now we have the mmget_still_valid()
-		 * model.
-		 */
-		if (!mmget_still_valid(mm)) {
-			up_write(&mm->mmap_sem);
-			return -EINTR;
-		}
 	} else {
-		down_read(&mm->mmap_sem);
+		down_read(&current->mm->mmap_sem);
 	}
 
 	/*
@@ -1141,7 +1109,7 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 	 * ranges, just ignore them, but return -ENOMEM at the end.
 	 * - different from the way of handling in mlock etc.
 	 */
-	vma = find_vma_prev(mm, start, &prev);
+	vma = find_vma_prev(current->mm, start, &prev);
 	if (vma && start > vma->vm_start)
 		prev = vma;
 
@@ -1178,107 +1146,14 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 		if (prev)
 			vma = prev->vm_next;
 		else	/* madvise_remove dropped mmap_sem */
-			vma = find_vma(mm, start);
+			vma = find_vma(current->mm, start);
 	}
 out:
 	blk_finish_plug(&plug);
 	if (write)
-		up_write(&mm->mmap_sem);
+		up_write(&current->mm->mmap_sem);
 	else
-		up_read(&mm->mmap_sem);
+		up_read(&current->mm->mmap_sem);
 
 	return error;
-}
-
-SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
-{
-	return do_madvise(current->mm, start, len_in, behavior);
-}
-
-SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
-		size_t, vlen, int, behavior, unsigned int, flags)
-{
-	ssize_t ret;
-	struct iovec iovstack[UIO_FASTIOV], iovec;
-	struct iovec *iov = iovstack;
-	struct iov_iter iter;
-	struct pid *pid;
-	struct task_struct *task;
-	struct mm_struct *mm;
-	size_t total_len;
-	unsigned int f_flags;
-
-	if (flags != 0) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = import_iovec(READ, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
-	if (ret < 0)
-		goto out;
-
-	pid = pidfd_get_pid(pidfd, &f_flags);
-	if (IS_ERR(pid)) {
-		ret = PTR_ERR(pid);
-		goto free_iov;
-	}
-
-	task = get_pid_task(pid, PIDTYPE_PID);
-	if (!task) {
-		ret = -ESRCH;
-		goto put_pid;
-	}
-
-	if (!process_madvise_behavior_valid(behavior)) {
-		ret = -EINVAL;
-		goto release_task;
-	}
-
-	/* Require PTRACE_MODE_READ to avoid leaking ASLR metadata. */
-	mm = mm_access(task, PTRACE_MODE_READ_FSCREDS);
-	if (IS_ERR_OR_NULL(mm)) {
-		ret = IS_ERR(mm) ? PTR_ERR(mm) : -ESRCH;
-		goto release_task;
-	}
-
-	/*
-	 * Require CAP_SYS_NICE for influencing process performance. Note that
-	 * only non-destructive hints are currently supported.
-	 */
-	if (!capable(CAP_SYS_NICE)) {
-		ret = -EPERM;
-		goto release_mm;
-	}
-
-	total_len = iov_iter_count(&iter);
-
-	while (iov_iter_count(&iter)) {
-		iovec = iov_iter_iovec(&iter);
-		/*
-		 * do_madvise returns ENOMEM if unmapped holes are present
-		 * in the passed VMA. process_madvise() is expected to skip
-		 * unmapped holes passed to it in the 'struct iovec' list
-		 * and not fail because of them. Thus treat -ENOMEM return
-		 * from do_madvise as valid and continue processing.
-		 */
-		ret = do_madvise(mm, (unsigned long)iovec.iov_base,
-				 iovec.iov_len, behavior);
-		if (ret < 0 && ret != -ENOMEM)
-			break;
-		iov_iter_advance(&iter, iovec.iov_len);
-	}
-
-	ret = (total_len - iov_iter_count(&iter)) ? : ret;
-
-release_mm:
-	mmput(mm);
-
-release_task:
-	put_task_struct(task);
-put_pid:
-	put_pid(pid);
-free_iov:
-	kfree(iov);
-out:
-	return ret;
 }

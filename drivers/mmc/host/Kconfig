@@ -489,8 +489,6 @@ config MMC_SDHCI_MSM
 	depends on ARCH_QCOM || (ARM && COMPILE_TEST)
 	depends on MMC_SDHCI_PLTFM
 	select MMC_SDHCI_IO_ACCESSORS
-	select MMC_CQHCI
-	select QCOM_SCM if MMC_CRYPTO && ARCH_QCOM
 	help
 	  This selects the Secure Digital Host Controller Interface (SDHCI)
 	  support present in Qualcomm SOCs. The controller supports
@@ -785,6 +783,13 @@ config MMC_DW_HI3798CV200
 	  This selects support for HiSilicon Hi3798CV200 SoC specific extensions to the
 	  Synopsys DesignWare Memory Card Interface driver. Select this option
 	  for platforms based on HiSilicon Hi3798CV200 SoC.
+
+config MMC_DW_DEBUG
+	tristate "Samsung DWMCI debug feature"
+	depends on MMC_DW
+	help
+	  This selects support for infomation logging for debugging.
+	  Select this option if this feature is needed on working.
 
 config MMC_DW_K3
 	tristate "K3 specific extensions for Synopsys DW Memory Card Interface"

@@ -8,7 +8,6 @@
 #include <asm/kvm_asm.h>
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
-#include "../../vfp/vfpinstr.h"
 
 __asm__(".arch_extension     virt");
 
@@ -27,10 +26,10 @@ static void __hyp_text __activate_traps(struct kvm_vcpu *vcpu, u32 *fpexc_host)
 	 * trap to SVC.  Therefore, always make sure that for 32-bit guests,
 	 * we set FPEXC.EN to prevent traps to SVC, when setting the TCP bits.
 	 */
-	val = fmrx(FPEXC);
+	val = read_sysreg(VFP_FPEXC);
 	*fpexc_host = val;
 	if (!(val & FPEXC_EN)) {
-		fmxr(FPEXC, val | FPEXC_EN);
+		write_sysreg(val | FPEXC_EN, VFP_FPEXC);
 		isb();
 	}
 
@@ -197,7 +196,7 @@ again:
 		__vfp_restore_state(&host_ctxt->vfp);
 	}
 
-	fmxr(FPEXC, fpexc);
+	write_sysreg(fpexc, VFP_FPEXC);
 
 	return exit_code;
 }

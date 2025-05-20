@@ -182,6 +182,13 @@ struct memcg_padding {
 #define MEMCG_PADDING(name)
 #endif
 
+#ifdef CONFIG_MEMCG_HEIMDALL
+#define MEMCG_HEIMDALL_SHRINK_ANON 1
+#define MEMCG_HEIMDALL_SHRINK_FILE 2
+void forced_shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memcg,
+			      int type, unsigned long nr_requested);
+#endif
+
 /*
  * Remember four most recent foreign writebacks with dirty pages in this
  * cgroup.  Inode sharing is expected to be uncommon and, even if we miss
@@ -330,7 +337,7 @@ struct mem_cgroup {
 	struct list_head event_list;
 	spinlock_t event_list_lock;
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_GKI_OPT_FEATURES)
 	struct deferred_split deferred_split_queue;
 #endif
 

@@ -122,8 +122,8 @@ config QCOM_RPMHPD
 	  for the voltage rail.
 
 config QCOM_RPMPD
-	tristate "Qualcomm RPM Power domain driver"
-	depends on QCOM_SMD_RPM
+	bool "Qualcomm RPM Power domain driver"
+	depends on QCOM_SMD_RPM=y
 	help
 	  QCOM RPM Power domain driver to support power-domains with
 	  performance states. The driver communicates a performance state

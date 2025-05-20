@@ -16,7 +16,6 @@
 #include <linux/io.h>
 #include <linux/leds.h>
 #include <linux/interrupt.h>
-#include <linux/android_kabi.h>
 
 #include <linux/mmc/host.h>
 
@@ -558,8 +557,7 @@ struct sdhci_host {
 	dma_addr_t adma_addr;	/* Mapped ADMA descr. table */
 	dma_addr_t align_addr;	/* Mapped bounce buffer */
 
-	unsigned int desc_sz;	/* ADMA current descriptor size */
-	unsigned int alloc_desc_sz;	/* ADMA descr. max size host supports */
+	unsigned int desc_sz;	/* ADMA descriptor size */
 
 	struct workqueue_struct *complete_wq;	/* Request completion wq */
 	struct work_struct	complete_work;	/* Request completion work */
@@ -608,8 +606,6 @@ struct sdhci_host {
 
 	u64			data_timeout;
 
-	ANDROID_KABI_RESERVE(1);
-
 	unsigned long private[0] ____cacheline_aligned;
 };
 
@@ -653,9 +649,6 @@ struct sdhci_ops {
 				   dma_addr_t addr, int len, unsigned int cmd);
 	void	(*request_done)(struct sdhci_host *host,
 				struct mmc_request *mrq);
-	void    (*dump_vendor_regs)(struct sdhci_host *host);
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS

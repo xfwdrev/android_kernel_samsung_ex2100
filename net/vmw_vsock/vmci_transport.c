@@ -57,7 +57,6 @@ static bool vmci_transport_old_proto_override(bool *old_pkt_proto);
 static u16 vmci_transport_new_proto_supported_versions(void);
 static bool vmci_transport_proto_to_notify_struct(struct sock *sk, u16 *proto,
 						  bool old_pkt_proto);
-static bool vmci_check_transport(struct vsock_sock *vsk);
 
 struct vmci_transport_recv_pkt_info {
 	struct work_struct work;
@@ -75,7 +74,14 @@ static u32 vmci_transport_qp_resumed_sub_id = VMCI_INVALID_ID;
 
 static int PROTOCOL_OVERRIDE = -1;
 
-static struct vsock_transport vmci_transport; /* forward declaration */
+#define VMCI_TRANSPORT_DEFAULT_QP_SIZE_MIN   128
+#define VMCI_TRANSPORT_DEFAULT_QP_SIZE       262144
+#define VMCI_TRANSPORT_DEFAULT_QP_SIZE_MAX   262144
+
+/* The default peer timeout indicates how long we will wait for a peer response
+ * to a control message.
+ */
+#define VSOCK_DEFAULT_CONNECT_TIMEOUT (2 * HZ)
 
 /* Helper function to convert from a VMCI error code to a VSock error code. */
 
@@ -805,11 +811,6 @@ static void vmci_transport_handle_detach(struct sock *sk)
 	struct vsock_sock *vsk;
 
 	vsk = vsock_sk(sk);
-
-	/* Only handle our own sockets */
-	if (vsk->transport != &vmci_transport)
-		return;
-
 	if (!vmci_handle_is_invalid(vmci_trans(vsk)->qp_handle)) {
 		sock_set_flag(sk, SOCK_DONE);
 
@@ -1011,7 +1012,8 @@ static int vmci_transport_recv_listen(struct sock *sk,
 		return -ECONNREFUSED;
 	}
 
-	pending = vsock_create_connected(sk);
+	pending = __vsock_create(sock_net(sk), NULL, sk, GFP_KERNEL,
+				 sk->sk_type, 0);
 	if (!pending) {
 		vmci_transport_send_reset(sk, pkt);
 		return -ENOMEM;
@@ -1024,24 +1026,14 @@ static int vmci_transport_recv_listen(struct sock *sk,
 	vsock_addr_init(&vpending->remote_addr, pkt->dg.src.context,
 			pkt->src_port);
 
-	err = vsock_assign_transport(vpending, vsock_sk(sk));
-	/* Transport assigned (looking at remote_addr) must be the same
-	 * where we received the request.
-	 */
-	if (err || !vmci_check_transport(vpending)) {
-		vmci_transport_send_reset(sk, pkt);
-		sock_put(pending);
-		return err;
-	}
-
 	/* If the proposed size fits within our min/max, accept it. Otherwise
 	 * propose our own size.
 	 */
-	if (pkt->u.size >= vpending->buffer_min_size &&
-	    pkt->u.size <= vpending->buffer_max_size) {
+	if (pkt->u.size >= vmci_trans(vpending)->queue_pair_min_size &&
+	    pkt->u.size <= vmci_trans(vpending)->queue_pair_max_size) {
 		qp_size = pkt->u.size;
 	} else {
-		qp_size = vpending->buffer_size;
+		qp_size = vmci_trans(vpending)->queue_pair_size;
 	}
 
 	/* Figure out if we are using old or new requests based on the
@@ -1110,7 +1102,7 @@ static int vmci_transport_recv_listen(struct sock *sk,
 	pending->sk_state = TCP_SYN_SENT;
 	vmci_trans(vpending)->produce_size =
 		vmci_trans(vpending)->consume_size = qp_size;
-	vpending->buffer_size = qp_size;
+	vmci_trans(vpending)->queue_pair_size = qp_size;
 
 	vmci_trans(vpending)->notify_ops->process_request(pending);
 
@@ -1404,8 +1396,8 @@ static int vmci_transport_recv_connecting_client_negotiate(
 	vsk->ignore_connecting_rst = false;
 
 	/* Verify that we're OK with the proposed queue pair size */
-	if (pkt->u.size < vsk->buffer_min_size ||
-	    pkt->u.size > vsk->buffer_max_size) {
+	if (pkt->u.size < vmci_trans(vsk)->queue_pair_min_size ||
+	    pkt->u.size > vmci_trans(vsk)->queue_pair_max_size) {
 		err = -EINVAL;
 		goto destroy;
 	}
@@ -1510,7 +1502,8 @@ vmci_transport_recv_connecting_client_invalid(struct sock *sk,
 		vsk->sent_request = false;
 		vsk->ignore_connecting_rst = true;
 
-		err = vmci_transport_send_conn_request(sk, vsk->buffer_size);
+		err = vmci_transport_send_conn_request(
+			sk, vmci_trans(vsk)->queue_pair_size);
 		if (err < 0)
 			err = vmci_transport_error_to_vsock_error(err);
 		else
@@ -1594,6 +1587,21 @@ static int vmci_transport_socket_init(struct vsock_sock *vsk,
 	INIT_LIST_HEAD(&vmci_trans(vsk)->elem);
 	vmci_trans(vsk)->sk = &vsk->sk;
 	spin_lock_init(&vmci_trans(vsk)->lock);
+	if (psk) {
+		vmci_trans(vsk)->queue_pair_size =
+			vmci_trans(psk)->queue_pair_size;
+		vmci_trans(vsk)->queue_pair_min_size =
+			vmci_trans(psk)->queue_pair_min_size;
+		vmci_trans(vsk)->queue_pair_max_size =
+			vmci_trans(psk)->queue_pair_max_size;
+	} else {
+		vmci_trans(vsk)->queue_pair_size =
+			VMCI_TRANSPORT_DEFAULT_QP_SIZE;
+		vmci_trans(vsk)->queue_pair_min_size =
+			 VMCI_TRANSPORT_DEFAULT_QP_SIZE_MIN;
+		vmci_trans(vsk)->queue_pair_max_size =
+			VMCI_TRANSPORT_DEFAULT_QP_SIZE_MAX;
+	}
 
 	return 0;
 }
@@ -1813,7 +1821,8 @@ static int vmci_transport_connect(struct vsock_sock *vsk)
 
 	if (vmci_transport_old_proto_override(&old_pkt_proto) &&
 		old_pkt_proto) {
-		err = vmci_transport_send_conn_request(sk, vsk->buffer_size);
+		err = vmci_transport_send_conn_request(
+			sk, vmci_trans(vsk)->queue_pair_size);
 		if (err < 0) {
 			sk->sk_state = TCP_CLOSE;
 			return err;
@@ -1821,7 +1830,8 @@ static int vmci_transport_connect(struct vsock_sock *vsk)
 	} else {
 		int supported_proto_versions =
 			vmci_transport_new_proto_supported_versions();
-		err = vmci_transport_send_conn_request2(sk, vsk->buffer_size,
+		err = vmci_transport_send_conn_request2(
+				sk, vmci_trans(vsk)->queue_pair_size,
 				supported_proto_versions);
 		if (err < 0) {
 			sk->sk_state = TCP_CLOSE;
@@ -1872,6 +1882,46 @@ static u64 vmci_transport_stream_rcvhiwat(struct vsock_sock *vsk)
 static bool vmci_transport_stream_is_active(struct vsock_sock *vsk)
 {
 	return !vmci_handle_is_invalid(vmci_trans(vsk)->qp_handle);
+}
+
+static u64 vmci_transport_get_buffer_size(struct vsock_sock *vsk)
+{
+	return vmci_trans(vsk)->queue_pair_size;
+}
+
+static u64 vmci_transport_get_min_buffer_size(struct vsock_sock *vsk)
+{
+	return vmci_trans(vsk)->queue_pair_min_size;
+}
+
+static u64 vmci_transport_get_max_buffer_size(struct vsock_sock *vsk)
+{
+	return vmci_trans(vsk)->queue_pair_max_size;
+}
+
+static void vmci_transport_set_buffer_size(struct vsock_sock *vsk, u64 val)
+{
+	if (val < vmci_trans(vsk)->queue_pair_min_size)
+		vmci_trans(vsk)->queue_pair_min_size = val;
+	if (val > vmci_trans(vsk)->queue_pair_max_size)
+		vmci_trans(vsk)->queue_pair_max_size = val;
+	vmci_trans(vsk)->queue_pair_size = val;
+}
+
+static void vmci_transport_set_min_buffer_size(struct vsock_sock *vsk,
+					       u64 val)
+{
+	if (val > vmci_trans(vsk)->queue_pair_size)
+		vmci_trans(vsk)->queue_pair_size = val;
+	vmci_trans(vsk)->queue_pair_min_size = val;
+}
+
+static void vmci_transport_set_max_buffer_size(struct vsock_sock *vsk,
+					       u64 val)
+{
+	if (val < vmci_trans(vsk)->queue_pair_size)
+		vmci_trans(vsk)->queue_pair_size = val;
+	vmci_trans(vsk)->queue_pair_max_size = val;
 }
 
 static int vmci_transport_notify_poll_in(
@@ -2029,8 +2079,7 @@ static u32 vmci_transport_get_local_cid(void)
 	return vmci_get_context_id();
 }
 
-static struct vsock_transport vmci_transport = {
-	.module = THIS_MODULE,
+static const struct vsock_transport vmci_transport = {
 	.init = vmci_transport_socket_init,
 	.destruct = vmci_transport_destruct,
 	.release = vmci_transport_release,
@@ -2057,25 +2106,14 @@ static struct vsock_transport vmci_transport = {
 	.notify_send_pre_enqueue = vmci_transport_notify_send_pre_enqueue,
 	.notify_send_post_enqueue = vmci_transport_notify_send_post_enqueue,
 	.shutdown = vmci_transport_shutdown,
+	.set_buffer_size = vmci_transport_set_buffer_size,
+	.set_min_buffer_size = vmci_transport_set_min_buffer_size,
+	.set_max_buffer_size = vmci_transport_set_max_buffer_size,
+	.get_buffer_size = vmci_transport_get_buffer_size,
+	.get_min_buffer_size = vmci_transport_get_min_buffer_size,
+	.get_max_buffer_size = vmci_transport_get_max_buffer_size,
 	.get_local_cid = vmci_transport_get_local_cid,
 };
-
-static bool vmci_check_transport(struct vsock_sock *vsk)
-{
-	return vsk->transport == &vmci_transport;
-}
-
-static void vmci_vsock_transport_cb(bool is_host)
-{
-	int features;
-
-	if (is_host)
-		features = VSOCK_TRANSPORT_F_H2G;
-	else
-		features = VSOCK_TRANSPORT_F_G2H;
-
-	vsock_core_register(&vmci_transport, features);
-}
 
 static int __init vmci_transport_init(void)
 {
@@ -2093,6 +2131,7 @@ static int __init vmci_transport_init(void)
 		pr_err("Unable to create datagram handle. (%d)\n", err);
 		return vmci_transport_error_to_vsock_error(err);
 	}
+
 	err = vmci_event_subscribe(VMCI_EVENT_QP_RESUMED,
 				   vmci_transport_qp_resumed_cb,
 				   NULL, &vmci_transport_qp_resumed_sub_id);
@@ -2103,21 +2142,12 @@ static int __init vmci_transport_init(void)
 		goto err_destroy_stream_handle;
 	}
 
-	/* Register only with dgram feature, other features (H2G, G2H) will be
-	 * registered when the first host or guest becomes active.
-	 */
-	err = vsock_core_register(&vmci_transport, VSOCK_TRANSPORT_F_DGRAM);
+	err = vsock_core_init(&vmci_transport);
 	if (err < 0)
 		goto err_unsubscribe;
 
-	err = vmci_register_vsock_callback(vmci_vsock_transport_cb);
-	if (err < 0)
-		goto err_unregister;
-
 	return 0;
 
-err_unregister:
-	vsock_core_unregister(&vmci_transport);
 err_unsubscribe:
 	vmci_event_unsubscribe(vmci_transport_qp_resumed_sub_id);
 err_destroy_stream_handle:
@@ -2143,8 +2173,7 @@ static void __exit vmci_transport_exit(void)
 		vmci_transport_qp_resumed_sub_id = VMCI_INVALID_ID;
 	}
 
-	vmci_register_vsock_callback(NULL);
-	vsock_core_unregister(&vmci_transport);
+	vsock_core_exit();
 }
 module_exit(vmci_transport_exit);
 

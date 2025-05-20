@@ -1,0 +1,37 @@
+config MOTOR_CS40L2X
+	tristate "Cirrus CS40L2X motor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable MOTOR_CS40L2X
+	  You can get support for vibration with
+	  cs40l2x driver ic if you enable
+	  this config.
+
+config CS40L2X_SAMSUNG_FEATURE
+	bool "Cirrus CS40L2X motor and Samsung feature"
+	depends on MOTOR_CS40L2X
+	default n
+	help
+	  Say Y to enable CS40L2X_SAMSUNG_FEATURE
+	  codes featured with this comment
+	  aren't the original code from cirrus.
+	  To use samsung concept, please enable this.
+
+config SUPPORT_OWT_CWS
+	bool "OWT CWS support"
+	default n
+	help
+	  If you say yes here you will get support for
+	  OWT(open wave table) and CWS(Chirp with scalability).
+	  Enabling this feature will create ops functions
+	  which is required for OWT CWS support
+
+config CS40L2X_VIB_FOLD_MODEL
+	bool "get support for folder status "
+	default n
+	help
+	  If you enable this feature,
+	  you will get event for folder status
+	  through event_cmd sysfs
+

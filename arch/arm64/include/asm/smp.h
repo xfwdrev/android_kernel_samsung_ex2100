@@ -56,15 +56,27 @@ static inline void set_cpu_logical_map(int cpu, u64 hwid)
 struct seq_file;
 
 /*
+ * generate IPI list text
+ */
+extern void show_ipi_list(struct seq_file *p, int prec);
+
+/*
+ * Called from C code, this handles an IPI.
+ */
+extern void handle_IPI(int ipinr, struct pt_regs *regs);
+
+/*
  * Discover the set of possible CPUs and determine their
  * SMP operations.
  */
 extern void smp_init_cpus(void);
 
 /*
- * Register IPI interrupts with the arch SMP code
+ * Provide a function to raise an IPI cross call on CPUs in callmap.
  */
-extern void set_smp_ipi_range(int ipi_base, int nr_ipi);
+extern void set_smp_cross_call(void (*)(const struct cpumask *, unsigned int));
+
+extern void (*__smp_cross_call)(const struct cpumask *, unsigned int);
 
 /*
  * Called from the secondary holding pen, this is the secondary CPU entry point.

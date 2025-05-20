@@ -29,7 +29,7 @@
 #include <uapi/linux/dma-buf.h>
 #include <uapi/linux/magic.h>
 
-#include "dma-buf-sysfs-stats.h"
+#include "dma-buf-trace.h"
 
 static inline int is_dma_buf_file(struct file *);
 
@@ -64,6 +64,8 @@ static void dma_buf_release(struct dentry *dentry)
 	if (unlikely(!dmabuf))
 		return;
 
+	dmabuf_trace_free(dmabuf);
+
 	BUG_ON(dmabuf->vmapping_counter);
 
 	/*
@@ -81,7 +83,6 @@ static void dma_buf_release(struct dentry *dentry)
 	if (dmabuf->resv == (struct dma_resv *)&dmabuf[1])
 		dma_resv_fini(dmabuf->resv);
 
-	dma_buf_stats_teardown(dmabuf);
 	WARN_ON(!list_empty(&dmabuf->attachments));
 	module_put(dmabuf->owner);
 	kfree(dmabuf->name);
@@ -408,6 +409,10 @@ static long dma_buf_ioctl(struct file *file,
 	case DMA_BUF_SET_NAME_A:
 	case DMA_BUF_SET_NAME_B:
 		return dma_buf_set_name(dmabuf, (const char __user *)arg);
+	case DMA_BUF_IOCTL_TRACK:
+		return dmabuf_trace_track_buffer(dmabuf);
+	case DMA_BUF_IOCTL_UNTRACK:
+		return dmabuf_trace_untrack_buffer(dmabuf);
 
 	default:
 		return -ENOTTY;
@@ -585,20 +590,10 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	list_add(&dmabuf->list_node, &db_list.head);
 	mutex_unlock(&db_list.lock);
 
-	ret = dma_buf_stats_setup(dmabuf);
-	if (ret)
-		goto err_sysfs;
+	dmabuf_trace_alloc(dmabuf);
 
 	return dmabuf;
 
-err_sysfs:
-	/*
-	 * Set file->f_path.dentry->d_fsdata to NULL so that when
-	 * dma_buf_release() gets invoked by dentry_ops, it exits
-	 * early before calling the release() dma_buf op.
-	 */
-	file->f_path.dentry->d_fsdata = NULL;
-	fput(file);
 err_dmabuf:
 	kfree(dmabuf);
 err_module:
@@ -727,9 +722,6 @@ err_attach:
 	kfree(attach);
 	mutex_unlock(&dmabuf->lock);
 	return ERR_PTR(ret);
-
-	dma_buf_detach(dmabuf, attach);
-	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(dma_buf_attach);
 
@@ -746,9 +738,8 @@ void dma_buf_detach(struct dma_buf *dmabuf, struct dma_buf_attachment *attach)
 	if (WARN_ON(!dmabuf || !attach))
 		return;
 
-	if (attach->sgt) {
+	if (attach->sgt)
 		dmabuf->ops->unmap_dma_buf(attach, attach->sgt, attach->dir);
-	}
 
 	mutex_lock(&dmabuf->lock);
 	list_del(&attach->node);
@@ -1342,7 +1333,7 @@ static int dma_buf_debug_show(struct seq_file *s, void *unused)
 
 DEFINE_SHOW_ATTRIBUTE(dma_buf_debug);
 
-static struct dentry *dma_buf_debugfs_dir;
+struct dentry *dma_buf_debugfs_dir;
 
 static int dma_buf_init_debugfs(void)
 {
@@ -1383,12 +1374,6 @@ static inline void dma_buf_uninit_debugfs(void)
 
 static int __init dma_buf_init(void)
 {
-	int ret;
-
-	ret = dma_buf_init_sysfs_statistics();
-	if (ret)
-		return ret;
-
 	dma_buf_mnt = kern_mount(&dma_buf_fs_type);
 	if (IS_ERR(dma_buf_mnt))
 		return PTR_ERR(dma_buf_mnt);
@@ -1404,6 +1389,5 @@ static void __exit dma_buf_deinit(void)
 {
 	dma_buf_uninit_debugfs();
 	kern_unmount(dma_buf_mnt);
-	dma_buf_uninit_sysfs_statistics();
 }
 __exitcall(dma_buf_deinit);

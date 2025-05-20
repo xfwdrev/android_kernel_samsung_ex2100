@@ -15,7 +15,6 @@ source "crypto/async_tx/Kconfig"
 #
 menuconfig CRYPTO
 	tristate "Cryptographic API"
-	select LIB_MEMNEQ
 	help
 	  This option provides the core Cryptographic API.
 
@@ -24,14 +23,12 @@ if CRYPTO
 comment "Crypto core or helper"
 
 config CRYPTO_FIPS
-	bool "FIPS 200 compliance"
-	depends on (CRYPTO_ANSI_CPRNG || CRYPTO_DRBG) && !CRYPTO_MANAGER_DISABLE_TESTS
-	depends on (MODULE_SIG || !MODULES)
+	bool "FIPS 140-2 compliance"
+	default n
 	help
-	  This option enables the fips boot option which is
-	  required if you want the system to operate in a FIPS 200
-	  certification.  You should say no unless you know what
-	  this is.
+	  This options enables the fips option which is
+	  required if you want to system to operate in a FIPS 140-2
+	  certification.
 
 config CRYPTO_ALGAPI
 	tristate
@@ -137,6 +134,8 @@ config CRYPTO_USER
 	  Userspace configuration for cryptographic instantiations such as
 	  cbc(aes).
 
+if CRYPTO_MANAGER2
+
 config CRYPTO_MANAGER_DISABLE_TESTS
 	bool "Disable run-time self tests"
 	default y
@@ -146,13 +145,15 @@ config CRYPTO_MANAGER_DISABLE_TESTS
 
 config CRYPTO_MANAGER_EXTRA_TESTS
 	bool "Enable extra run-time crypto self tests"
-	depends on DEBUG_KERNEL && !CRYPTO_MANAGER_DISABLE_TESTS && CRYPTO_MANAGER
+	depends on DEBUG_KERNEL && !CRYPTO_MANAGER_DISABLE_TESTS
 	help
 	  Enable extra run-time self tests of registered crypto algorithms,
 	  including randomized fuzz tests.
 
 	  This is intended for developer use only, as these tests take much
 	  longer to run than the normal self tests.
+
+endif	# if CRYPTO_MANAGER2
 
 config CRYPTO_GF128MUL
 	tristate
@@ -202,7 +203,7 @@ config CRYPTO_AUTHENC
 
 config CRYPTO_TEST
 	tristate "Testing module"
-	depends on m
+	default n
 	select CRYPTO_MANAGER
 	help
 	  Quick & dirty crypto test module.
@@ -260,17 +261,6 @@ config CRYPTO_ECRDSA
 	  RFC 7091, ISO/IEC 14888-3:2018) is one of the Russian cryptographic
 	  standard algorithms (called GOST algorithms). Only signature verification
 	  is implemented.
-
-config CRYPTO_CURVE25519
-	tristate "Curve25519 algorithm"
-	select CRYPTO_KPP
-	select CRYPTO_LIB_CURVE25519_GENERIC
-
-config CRYPTO_CURVE25519_X86
-	tristate "x86_64 accelerated Curve25519 scalar multiplication library"
-	depends on X86 && 64BIT
-	select CRYPTO_LIB_CURVE25519_GENERIC
-	select CRYPTO_ARCH_HAVE_LIB_CURVE25519
 
 comment "Authenticated Encryption with Associated Data"
 
@@ -454,7 +444,7 @@ config CRYPTO_KEYWRAP
 config CRYPTO_NHPOLY1305
 	tristate
 	select CRYPTO_HASH
-	select CRYPTO_LIB_POLY1305_GENERIC
+	select CRYPTO_POLY1305
 
 config CRYPTO_NHPOLY1305_SSE2
 	tristate "NHPoly1305 hash function (x86_64 SSE2 implementation)"
@@ -475,7 +465,7 @@ config CRYPTO_NHPOLY1305_AVX2
 config CRYPTO_ADIANTUM
 	tristate "Adiantum support"
 	select CRYPTO_CHACHA20
-	select CRYPTO_LIB_POLY1305_GENERIC
+	select CRYPTO_POLY1305
 	select CRYPTO_NHPOLY1305
 	select CRYPTO_MANAGER
 	help
@@ -735,7 +725,6 @@ config CRYPTO_GHASH
 config CRYPTO_POLY1305
 	tristate "Poly1305 authenticator algorithm"
 	select CRYPTO_HASH
-	select CRYPTO_LIB_POLY1305_GENERIC
 	help
 	  Poly1305 authenticator algorithm, RFC7539.
 
@@ -746,8 +735,7 @@ config CRYPTO_POLY1305
 config CRYPTO_POLY1305_X86_64
 	tristate "Poly1305 authenticator algorithm (x86_64/SSE2/AVX2)"
 	depends on X86 && 64BIT
-	select CRYPTO_LIB_POLY1305_GENERIC
-	select CRYPTO_ARCH_HAVE_LIB_POLY1305
+	select CRYPTO_POLY1305
 	help
 	  Poly1305 authenticator algorithm, RFC7539.
 
@@ -755,11 +743,6 @@ config CRYPTO_POLY1305_X86_64
 	  It is used for the ChaCha20-Poly1305 AEAD, specified in RFC7539 for use
 	  in IETF protocols. This is the x86_64 assembler implementation using SIMD
 	  instructions.
-
-config CRYPTO_POLY1305_MIPS
-	tristate "Poly1305 authenticator algorithm (MIPS optimized)"
-	depends on MIPS
-	select CRYPTO_ARCH_HAVE_LIB_POLY1305
 
 config CRYPTO_MD4
 	tristate "MD4 digest algorithm"
@@ -1449,7 +1432,6 @@ config CRYPTO_SALSA20
 
 config CRYPTO_CHACHA20
 	tristate "ChaCha stream cipher algorithms"
-	select CRYPTO_LIB_CHACHA_GENERIC
 	select CRYPTO_BLKCIPHER
 	help
 	  The ChaCha20, XChaCha20, and XChaCha12 stream cipher algorithms.
@@ -1473,17 +1455,10 @@ config CRYPTO_CHACHA20_X86_64
 	tristate "ChaCha stream cipher algorithms (x86_64/SSSE3/AVX2/AVX-512VL)"
 	depends on X86 && 64BIT
 	select CRYPTO_BLKCIPHER
-	select CRYPTO_LIB_CHACHA_GENERIC
-	select CRYPTO_ARCH_HAVE_LIB_CHACHA
+	select CRYPTO_CHACHA20
 	help
 	  SSSE3, AVX2, and AVX-512VL optimized implementations of the ChaCha20,
 	  XChaCha20, and XChaCha12 stream ciphers.
-
-config CRYPTO_CHACHA_MIPS
-	tristate "ChaCha stream cipher algorithms (MIPS 32r2 optimized)"
-	depends on CPU_MIPS32_R2
-	select CRYPTO_BLKCIPHER
-	select CRYPTO_ARCH_HAVE_LIB_CHACHA
 
 config CRYPTO_SEED
 	tristate "SEED cipher algorithm"

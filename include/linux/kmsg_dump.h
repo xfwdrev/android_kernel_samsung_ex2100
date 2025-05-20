@@ -25,8 +25,9 @@ enum kmsg_dump_reason {
 	KMSG_DUMP_PANIC,
 	KMSG_DUMP_OOPS,
 	KMSG_DUMP_EMERG,
-	KMSG_DUMP_SHUTDOWN,
-	KMSG_DUMP_MAX
+	KMSG_DUMP_RESTART,
+	KMSG_DUMP_HALT,
+	KMSG_DUMP_POWEROFF,
 };
 
 /**
@@ -70,8 +71,6 @@ void kmsg_dump_rewind(struct kmsg_dumper *dumper);
 int kmsg_dump_register(struct kmsg_dumper *dumper);
 
 int kmsg_dump_unregister(struct kmsg_dumper *dumper);
-
-const char *kmsg_dump_reason_str(enum kmsg_dump_reason reason);
 #else
 static inline void kmsg_dump(enum kmsg_dump_reason reason)
 {
@@ -112,11 +111,6 @@ static inline int kmsg_dump_register(struct kmsg_dumper *dumper)
 static inline int kmsg_dump_unregister(struct kmsg_dumper *dumper)
 {
 	return -EINVAL;
-}
-
-static inline const char *kmsg_dump_reason_str(enum kmsg_dump_reason reason)
-{
-	return "Disabled";
 }
 #endif
 

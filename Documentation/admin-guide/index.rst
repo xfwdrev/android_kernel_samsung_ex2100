@@ -58,7 +58,6 @@ configure specific aspects of kernel behavior to your liking.
    :maxdepth: 1
 
    initrd
-   bootconfig
    cgroup-v2
    cgroup-v1/index
    serial-console

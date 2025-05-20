@@ -23,14 +23,14 @@ static struct sg_table *dup_sg_table(struct sg_table *table)
 	if (!new_table)
 		return ERR_PTR(-ENOMEM);
 
-	ret = sg_alloc_table(new_table, table->orig_nents, GFP_KERNEL);
+	ret = sg_alloc_table(new_table, table->nents, GFP_KERNEL);
 	if (ret) {
 		kfree(new_table);
 		return ERR_PTR(-ENOMEM);
 	}
 
 	new_sg = new_table->sgl;
-	for_each_sg(table->sgl, sg, table->orig_nents, i) {
+	for_each_sg(table->sgl, sg, table->nents, i) {
 		memcpy(new_sg, sg, sizeof(*sg));
 		new_sg->dma_address = 0;
 		new_sg = sg_next(new_sg);
@@ -116,9 +116,8 @@ static struct sg_table *ion_map_dma_buf(struct dma_buf_attachment *attachment,
 	if (!(buffer->flags & ION_FLAG_CACHED))
 		attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 
-	table->nents = dma_map_sg_attrs(attachment->dev, table->sgl,
-					table->orig_nents, direction, attrs);
-	if (!table->nents)
+	if (!dma_map_sg_attrs(attachment->dev, table->sgl, table->nents,
+			      direction, attrs))
 		return ERR_PTR(-ENOMEM);
 
 	a->mapped = true;
@@ -144,7 +143,7 @@ static void ion_unmap_dma_buf(struct dma_buf_attachment *attachment,
 	if (!(buffer->flags & ION_FLAG_CACHED))
 		attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 
-	dma_unmap_sg_attrs(attachment->dev, table->sgl, table->orig_nents,
+	dma_unmap_sg_attrs(attachment->dev, table->sgl, table->nents,
 			   direction, attrs);
 }
 
@@ -176,7 +175,7 @@ static int ion_dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 	list_for_each_entry(a, &buffer->attachments, list) {
 		if (!a->mapped)
 			continue;
-		dma_sync_sg_for_cpu(a->dev, a->table->sgl, a->table->orig_nents,
+		dma_sync_sg_for_cpu(a->dev, a->table->sgl, a->table->nents,
 				    direction);
 	}
 
@@ -221,8 +220,8 @@ static int ion_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 	list_for_each_entry(a, &buffer->attachments, list) {
 		if (!a->mapped)
 			continue;
-		dma_sync_sg_for_device(a->dev, a->table->sgl,
-				       a->table->orig_nents, direction);
+		dma_sync_sg_for_device(a->dev, a->table->sgl, a->table->nents,
+				       direction);
 	}
 unlock:
 	mutex_unlock(&buffer->lock);
@@ -377,8 +376,11 @@ struct dma_buf *ion_dmabuf_alloc(struct ion_device *dev, size_t len,
 	exp_info.priv = buffer;
 
 	dmabuf = dma_buf_export(&exp_info);
-	if (IS_ERR(dmabuf))
+	if (IS_ERR(dmabuf)) {
+		pr_err("%s: failed to export dmabuf (err %ld)\n",
+		       __func__, -PTR_ERR(dmabuf));
 		ion_buffer_destroy(dev, buffer);
+	}
 
 	return dmabuf;
 }

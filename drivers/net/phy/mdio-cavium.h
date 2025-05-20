@@ -90,7 +90,7 @@ union cvmx_smix_wr_dat {
 
 struct cavium_mdiobus {
 	struct mii_bus *mii_bus;
-	void __iomem *register_base;
+	u64 register_base;
 	enum cavium_mdiobus_mode mode;
 };
 
@@ -98,20 +98,20 @@ struct cavium_mdiobus {
 
 #include <asm/octeon/octeon.h>
 
-static inline void oct_mdio_writeq(u64 val, void __iomem *addr)
+static inline void oct_mdio_writeq(u64 val, u64 addr)
 {
-	cvmx_write_csr((u64 __force)addr, val);
+	cvmx_write_csr(addr, val);
 }
 
-static inline u64 oct_mdio_readq(void __iomem *addr)
+static inline u64 oct_mdio_readq(u64 addr)
 {
-	return cvmx_read_csr((u64 __force)addr);
+	return cvmx_read_csr(addr);
 }
 #else
 #include <linux/io-64-nonatomic-lo-hi.h>
 
-#define oct_mdio_writeq(val, addr)	writeq(val, addr)
-#define oct_mdio_readq(addr)		readq(addr)
+#define oct_mdio_writeq(val, addr)	writeq(val, (void *)addr)
+#define oct_mdio_readq(addr)		readq((void *)addr)
 #endif
 
 int cavium_mdiobus_read(struct mii_bus *bus, int phy_id, int regnum);

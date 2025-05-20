@@ -17,7 +17,6 @@
 #include <linux/err.h>
 #include <linux/bug.h>
 #include <linux/lockdep.h>
-#include <linux/android_kabi.h>
 
 struct module;
 struct clk;
@@ -405,8 +404,6 @@ struct regmap_config {
 	bool use_hwlock;
 	unsigned int hwlock_id;
 	unsigned int hwlock_mode;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 /**
@@ -444,8 +441,6 @@ struct regmap_range_cfg {
 	/* Data window (per each page) */
 	unsigned int window_start;
 	unsigned int window_len;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 struct regmap_async;
@@ -522,8 +517,6 @@ struct regmap_bus {
 	enum regmap_endian val_format_endian_default;
 	size_t max_raw_read;
 	size_t max_raw_write;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 /*

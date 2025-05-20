@@ -77,6 +77,10 @@ enum lsm_event {
 	LSM_POLICY_CHANGE,
 };
 
+#ifndef CONFIG_KDP_CRED
+#define security_integrity_current()  0
+#endif
+
 /*
  * These are reasons that can be passed to the security_locked_down()
  * LSM hook. Lockdown reasons that protect kernel integrity (ie, the
@@ -320,9 +324,6 @@ void security_inode_free(struct inode *inode);
 int security_inode_init_security(struct inode *inode, struct inode *dir,
 				 const struct qstr *qstr,
 				 initxattrs initxattrs, void *fs_data);
-int security_inode_init_security_anon(struct inode *inode,
-				      const struct qstr *name,
-				      const struct inode *context_inode);
 int security_old_inode_init_security(struct inode *inode, struct inode *dir,
 				     const struct qstr *qstr, const char **name,
 				     void **value, size_t *len);
@@ -721,13 +722,6 @@ static inline int security_inode_init_security(struct inode *inode,
 						const struct qstr *qstr,
 						const initxattrs xattrs,
 						void *fs_data)
-{
-	return 0;
-}
-
-static inline int security_inode_init_security_anon(struct inode *inode,
-						    const struct qstr *name,
-						    const struct inode *context_inode)
 {
 	return 0;
 }

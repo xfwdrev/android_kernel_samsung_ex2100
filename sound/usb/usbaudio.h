@@ -12,8 +12,6 @@
 #define USB_ID_VENDOR(id) ((id) >> 16)
 #define USB_ID_PRODUCT(id) ((u16)(id))
 
-#include <linux/android_kabi.h>
-
 /*
  *
  */
@@ -62,11 +60,6 @@ struct snd_usb_audio {
 	struct mutex dev_lock;  /* to protect any race with disconnect */
 	int card_num;	/* cache pcm card number to use upon disconnect */
 	void (*disconnect_cb)(struct snd_usb_audio *chip);
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 #define USB_AUDIO_IFACE_UNUSED	((void *)-1L)
@@ -178,9 +171,6 @@ struct snd_usb_audio_vendor_ops {
 				 struct audioformat *found,
 				 int *cur_attr, int *attr);
 	int (*usb_add_ctls)(struct snd_usb_audio *chip);
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 #endif /* __USBAUDIO_H */

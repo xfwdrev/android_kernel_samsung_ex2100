@@ -26,6 +26,7 @@
 #include <linux/percpu.h>
 #include <linux/task_work.h>
 #include <linux/ima.h>
+#include <linux/task_integrity.h>
 #include <linux/swap.h>
 
 #include <linux/atomic.h>
@@ -198,7 +199,6 @@ static struct file *alloc_file(const struct path *path, int flags,
 	file->f_inode = path->dentry->d_inode;
 	file->f_mapping = path->dentry->d_inode->i_mapping;
 	file->f_wb_err = filemap_sample_wb_err(file->f_mapping);
-	file->f_sb_err = file_sample_sb_err(file);
 	if ((file->f_mode & FMODE_READ) &&
 	     likely(fop->read || fop->read_iter))
 		file->f_mode |= FMODE_CAN_READ;
@@ -273,6 +273,7 @@ static void __fput(struct file *file)
 	locks_remove_file(file);
 
 	ima_file_free(file);
+	five_file_free(file);
 	if (unlikely(file->f_flags & FASYNC)) {
 		if (file->f_op->fasync)
 			file->f_op->fasync(-1, file, 0);

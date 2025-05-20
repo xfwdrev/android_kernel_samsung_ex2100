@@ -791,6 +791,7 @@ static int dm_bow_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	rb_insert_color(&br->node, &bc->ranges);
 
 	ti->discards_supported = true;
+	ti->may_passthrough_inline_crypto = true;
 
 	return 0;
 
@@ -1273,7 +1274,6 @@ static int dm_bow_iterate_devices(struct dm_target *ti,
 static struct target_type bow_target = {
 	.name   = "bow",
 	.version = {1, 2, 0},
-	.features = DM_TARGET_PASSES_CRYPTO,
 	.module = THIS_MODULE,
 	.ctr    = dm_bow_ctr,
 	.dtr    = dm_bow_dtr,

@@ -31,8 +31,11 @@
 #include "avc_ss.h"
 #include "classmap.h"
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/avc.h>
+// [ SEC_SELINUX_PORTING_COMMON
+#ifdef SEC_SELINUX_DEBUG
+#include <linux/signal.h>
+#endif
+// ] SEC_SELINUX_PORTING_COMMON
 
 #define AVC_CACHE_SLOTS			512
 #define AVC_DEF_CACHE_THRESHOLD		512
@@ -706,36 +709,32 @@ static void avc_audit_post_callback(struct audit_buffer *ab, void *a)
 {
 	struct common_audit_data *ad = a;
 	struct selinux_audit_data *sad = ad->selinux_audit_data;
-	char *scontext = NULL;
-	char *tcontext = NULL;
-	const char *tclass = NULL;
+	char *scontext;
 	u32 scontext_len;
-	u32 tcontext_len;
 	int rc;
 
 	rc = security_sid_to_context(sad->state, sad->ssid, &scontext,
 				     &scontext_len);
 	if (rc)
 		audit_log_format(ab, " ssid=%d", sad->ssid);
-	else
+	else {
 		audit_log_format(ab, " scontext=%s", scontext);
+		kfree(scontext);
+	}
 
-	rc = security_sid_to_context(sad->state, sad->tsid, &tcontext,
-				     &tcontext_len);
+	rc = security_sid_to_context(sad->state, sad->tsid, &scontext,
+				     &scontext_len);
 	if (rc)
 		audit_log_format(ab, " tsid=%d", sad->tsid);
-	else
-		audit_log_format(ab, " tcontext=%s", tcontext);
+	else {
+		audit_log_format(ab, " tcontext=%s", scontext);
+		kfree(scontext);
+	}
 
-	tclass = secclass_map[sad->tclass-1].name;
-	audit_log_format(ab, " tclass=%s", tclass);
+	audit_log_format(ab, " tclass=%s", secclass_map[sad->tclass-1].name);
 
 	if (sad->denied)
 		audit_log_format(ab, " permissive=%u", sad->result ? 0 : 1);
-
-	trace_selinux_audited(sad, scontext, tcontext, tclass);
-	kfree(tcontext);
-	kfree(scontext);
 
 	/* in case of invalid context report also the actual context string */
 	rc = security_sid_to_context_inval(sad->state, sad->ssid, &scontext,
@@ -1020,6 +1019,55 @@ static noinline int avc_denied(struct selinux_state *state,
 {
 	if (flags & AVC_STRICT)
 		return -EACCES;
+
+// [ SEC_SELINUX_PORTING_COMMON
+#ifdef SEC_SELINUX_DEBUG
+	if ((requested & avd->auditallow) && !(avd->flags & AVD_FLAGS_PERMISSIVE)) {
+			char *scontext, *tcontext;
+			const char **perms;
+			int i, perm;
+			int rc1, rc2;
+			u32 scontext_len, tcontext_len;
+	
+			perms = secclass_map[tclass-1].perms;
+			i = 0;
+			perm = 1;
+			while (i < (sizeof(requested) * 8)) {
+				if ((perm & requested) && perms[i])
+					break;
+				i++;
+				perm <<= 1;
+			}
+	
+			rc1 = security_sid_to_context(state, ssid, &scontext, &scontext_len);
+			rc2 = security_sid_to_context(state, tsid, &tcontext, &tcontext_len);
+	
+			if (rc1 || rc2) {
+				pr_err("SELinux DEBUG : %s: ssid=%d tsid=%d tclass=%s perm=%s requested(%d) auditallow(%d)\n",
+			       __func__, ssid, tsid, secclass_map[tclass-1].name, perms[i], requested, avd->auditallow);
+			} else {
+				pr_err("SELinux DEBUG : %s: scontext=%s tcontext=%s tclass=%s perm=%s requested(%d) auditallow(%d)\n",
+			       __func__, scontext, tcontext, secclass_map[tclass-1].name, perms[i], requested, avd->auditallow);
+			}
+
+    		/* print call stack */
+    		pr_err("SELinux DEBUG : FATAL denial and start dump_stack\n");
+	    	dump_stack();
+
+		    /* enforcing : SIGABRT and take debuggerd log */
+            if (!(avd->flags & AVD_FLAGS_PERMISSIVE)) {
+			    pr_err("SELinux DEBUG : send SIGABRT to current tsk\n");
+			    send_sig(SIGABRT, current, 2);
+		    }
+
+		    if (!rc1)
+			    kfree(scontext);
+	        if (!rc2)
+			    kfree(tcontext);
+
+	}
+#endif
+// ] SEC_SELINUX_PORTING_COMMON
 
 	if (enforcing_enabled(state) &&
 	    !(avd->flags & AVD_FLAGS_PERMISSIVE))
