@@ -4469,6 +4469,7 @@
 			gpios = <0xb2 0x0d 0x00>;
 			linux,default-trigger = "panic-indicator";
 			default-state = "off";
+			panic-indicator;
 		};
 
 		wlan {
