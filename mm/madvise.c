@@ -167,9 +167,8 @@ success:
 	/*
 	 * vm_flags is protected by the mmap_sem held in write mode.
 	 */
-	vm_write_begin(vma);
-	WRITE_ONCE(vma->vm_flags, new_flags);
-	vm_write_end(vma);
+	vma->vm_flags = vma_pad_fixup_flags(vma, new_flags);
+
 out_convert_errno:
 	/*
 	 * madvise() returns EAGAIN if kernel resources, such as
