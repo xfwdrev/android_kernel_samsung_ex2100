@@ -1829,6 +1829,8 @@ int dwc3_probe(struct platform_device *pdev,
 	exynos_usbdrd_phy_conn(dwc->usb2_generic_phy, 0);
 
 	pr_info("%s: ---\n", __func__);
+	dma_set_max_seg_size(dev, UINT_MAX);
+
 	return 0;
 
 err5:
