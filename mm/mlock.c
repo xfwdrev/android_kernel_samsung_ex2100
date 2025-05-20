@@ -13,6 +13,7 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 #include <linux/pagemap.h>
+#include <linux/pgsize_migration.h>
 #include <linux/pagevec.h>
 #include <linux/mempolicy.h>
 #include <linux/syscalls.h>
@@ -571,11 +572,10 @@ success:
 	 * It's okay if try_to_unmap_one unmaps a page just after we
 	 * set VM_LOCKED, populate_vma_page_range will bring it back.
 	 */
-	if (lock) {
-		vm_write_begin(vma);
-		WRITE_ONCE(vma->vm_flags, newflags);
-		vm_write_end(vma);
-	} else
+
+	if (lock)
+		vma->vm_flags = vma_pad_fixup_flags(vma, newflags);
+	else
 		munlock_vma_pages_range(vma, start, end);
 
 out:
