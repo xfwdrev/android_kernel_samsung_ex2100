@@ -1567,11 +1567,8 @@ struct xhci_td {
 	bool			urb_length_set;
 };
 
-/*
- * xHCI command default timeout value in milliseconds.
- * USB 3.2 spec, section 9.2.6.1
- */
-#define XHCI_CMD_DEFAULT_TIMEOUT	5000
+/* xHCI command default timeout value */
+#define XHCI_CMD_DEFAULT_TIMEOUT	(5 * HZ)
 
 /* command descriptor */
 struct xhci_cd {
