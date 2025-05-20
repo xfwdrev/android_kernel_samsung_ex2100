@@ -74,7 +74,6 @@
   _dev_info
   __dev_kfree_skb_any
   devm_ioremap
-  devm_kfree
   devm_kmalloc
   devm_request_threaded_irq
   dev_queue_xmit
@@ -260,11 +259,9 @@
   _raw_spin_unlock_irqrestore
   __rcu_read_lock
   __rcu_read_unlock
-  refcount_dec_and_test_checked
-  refcount_inc_checked
+  refcount_warn_saturate
   __refrigerator
   register_blkdev
-  register_netdev
   register_netdevice
   register_netdevice_notifier
   register_shrinker
@@ -377,6 +374,8 @@
   virtio_break_device
   virtio_check_driver_offered_feature
   virtio_config_changed
+  virtio_device_freeze
+  virtio_device_restore
   virtio_max_dma_size
   virtqueue_add_inbuf
   virtqueue_add_outbuf
@@ -398,7 +397,6 @@
   vring_del_virtqueue
   vring_interrupt
   vring_transport_features
-  wait_for_completion
   __wake_up
   wake_up_process
   __warn_printk
@@ -448,6 +446,7 @@
   power_supply_unregister
 
 # required by goldfish_pipe.ko
+  devm_kfree
   get_user_pages_fast
   set_page_dirty
   tasklet_init
@@ -548,7 +547,6 @@
   skb_copy_expand
   __skb_ext_put
   skb_trim
-  skb_unlink
   unregister_pernet_device
   wiphy_apply_custom_regulatory
 
@@ -651,6 +649,7 @@
   netdev_lower_state_changed
   netdev_pick_tx
   pci_bus_type
+  register_netdev
 
 # required by page_pool.ko
   mod_node_page_state
@@ -736,7 +735,6 @@
   device_del
   kasprintf
   kobject_create_and_add
-  pm_runtime_get_if_in_use
   pm_runtime_get_if_active
   __pm_runtime_set_status
   regcache_cache_only
@@ -976,11 +974,13 @@
   blk_mq_complete_request
   blk_mq_end_request
   blk_mq_free_tag_set
+  blk_mq_freeze_queue
   blk_mq_init_queue
-  blk_mq_quiesce_queue
+  blk_mq_quiesce_queue_nowait
   blk_mq_start_request
   blk_mq_start_stopped_hw_queues
   blk_mq_stop_hw_queue
+  blk_mq_unfreeze_queue
   blk_mq_unquiesce_queue
   blk_mq_virtio_map_queues
   blk_put_request
@@ -1017,6 +1017,7 @@
   single_release
   __splice_from_pipe
   __unregister_chrdev
+  wait_for_completion
 
 # required by virtio_input.ko
   input_alloc_absinfo
@@ -1025,8 +1026,7 @@
 
 # required by virtio_mmio.ko
   device_for_each_child
-  __devm_request_region
-  iomem_resource
+  devm_platform_ioremap_resource
   platform_device_register_full
   sscanf
 
@@ -1107,8 +1107,6 @@
   pci_release_selected_regions
   pci_request_selected_regions
   pci_vfs_assigned
-  virtio_device_freeze
-  virtio_device_restore
 
 # required by virtio_pmem.ko
   nvdimm_bus_register
@@ -1116,8 +1114,6 @@
   nvdimm_pmem_region_create
 
 # required by vmw_vsock_virtio_transport.ko
-  lock_sock_nested
-  release_sock
   virtio_transport_connect
   virtio_transport_deliver_tap_pkt
   virtio_transport_destruct
@@ -1178,10 +1174,21 @@
 # required by zsmalloc.ko
   dec_zone_page_state
   inc_zone_page_state
-  __lock_page
   page_mapping
   _raw_read_lock
   _raw_read_unlock
   _raw_write_lock
   _raw_write_unlock
   wait_on_page_bit
+
+# preserved by --additions-only
+  blk_mq_quiesce_queue
+  __devm_request_region
+  iomem_resource
+  __lock_page
+  lock_sock_nested
+  pm_runtime_get_if_in_use
+  refcount_dec_and_test_checked
+  refcount_inc_checked
+  release_sock
+  skb_unlink

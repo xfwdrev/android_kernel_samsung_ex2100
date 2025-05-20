@@ -1212,12 +1212,14 @@
   drm_dev_unregister
   fd_install
   fget
+  find_pid_ns
   find_vma
   find_vpid
   __get_task_comm
   get_unused_fd_flags
   idr_preload
   idr_replace
+  init_pid_ns
   ion_query_heaps_kernel
   kill_pid
   ksize
