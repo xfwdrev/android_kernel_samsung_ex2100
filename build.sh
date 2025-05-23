@@ -1,5 +1,34 @@
 #!/bin/bash
 
+PATCH_MARKER=".patch_applied_ksu_susfs"
+PATCH_FILE="$PWD/patches/patch-susfs.patch"
+PATCH_DIR="$PWD/KernelSU-Next"
+
+apply_ksu_susfs_patch() {
+    if [[ "$KSU_OPTION" == "y" ]]; then
+        if [ ! -f "$PATCH_MARKER" ]; then
+            echo "Applying SuSFS patch to KernelSU..."
+            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
+                echo "Failed to apply SuSFS patch!"
+                exit 1
+            }
+            touch "$PATCH_MARKER"
+        else
+            echo "SuSFS patch already applied. Skipping..."
+        fi
+    fi
+}
+
+if [[ "$KSU_OPTION" == "y" ]]; then
+    if [ ! -d "KernelSU-Next" ]; then
+        echo "KernelSU-Next not found. Initializing submodules..."
+        git submodule update --init --recursive || {
+            echo "Failed to initialize KernelSU-Next submodule!"
+            exit 1
+        }
+    fi
+fi
+
 abort()
 {
     cd -
@@ -326,6 +355,7 @@ build_zip() {
     popd > /dev/null
 }
 
+apply_ksu_susfs_patch
 build_kernel
 build_boot
 build_dtb
