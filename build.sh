@@ -86,6 +86,10 @@ O=out
 
 # Define specific variables
 case $MODEL in
+r9s)
+    KERNEL_DEFCONFIG=chiclet_r9s_defconfig
+    BOARD=SRPUG16A010KU
+;;
 o1s)
     KERNEL_DEFCONFIG=chiclet_o1s_defconfig
     BOARD=SRPTH19C011KU
