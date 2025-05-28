@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+
+config SENSORS_VL53L5
+	depends on SPI
+	tristate "VL53L5 driver"
+	default n
+	help
+	  Say Y here if you use VL53L5.
+	  This option enables range sensor using VL53L5.
+
+config SENSORS_VL53L5_SUPPORT_UAPI
+	tristate "STM vl53l5 ranging sensor UPAI interface"
+	default n
+	help
+	  STM vl53l5 ranging sensor UPAI interface.
+
+config SENSORS_VL53L5_SUPPORT_KERNEL_INTERFACE
+	tristate "STM vl53l5 ranging sensor Kernel Interface"
+	default n
+	help
+	  STM vl53l5 ranging sensor Kernel Interface.
+
+config SENSORS_VL53L5_QCOM
+	tristate "vl53l5 ranging sensor feature for Snapdragon"
+	default n
+	help
+	  vl53l5 ranging sensor feature for Snapdragon AP.
+
+config SENSORS_VL53L5_SLSI
+	tristate "vl53l5 ranging sensor feature for Exynos"
+	default n
+	help
+	  vl53l5 ranging sensor feature for Exynos AP.
+
