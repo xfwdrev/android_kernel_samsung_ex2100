@@ -45,6 +45,7 @@ Usage: $(basename "$0") [options]
 Options:
     -m, --model [value]    Specify the model code of the phone
     -k, --ksu [y/N]        Include KernelSU
+    -r, --recovery [y/N]   Compile kernel for an Android Recovery
 EOF
 }
 
@@ -56,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --ksu|-k)
             KSU_OPTION="$2"
+            shift 2
+            ;;
+        --recovery|-r)
+            RECOVERY_OPTION="$2"
             shift 2
             ;;
         *)\
@@ -107,6 +112,11 @@ p3s)
     exit
 esac
 
+if [[ "$RECOVERY_OPTION" == "y" ]]; then
+    RECOVERY=recovery.config
+    KSU_OPTION=n
+fi
+
 if [ -z $KSU_OPTION ]; then
     read -p "Include KernelSU (y/N): " KSU_OPTION
 fi
@@ -124,17 +134,26 @@ build_kernel() {
     echo "-----------------------------------------------"
     echo "Defconfig: "$KERNEL_DEFCONFIG""
 
+    if [[ "$RECOVERY_OPTION" == "y" ]]; then
+        RECOVERY=recovery.config
+        KSU_OPTION=n
+    fi
     if [ -z "$KSU" ]; then
         echo "KSU: N"
     else
         echo "KSU: $KSU"
+    fi
+    if [ -z "$RECOVERY" ]; then
+    echo "Recovery: N"
+    else
+        echo "Recovery: Y"
     fi
 
     echo "-----------------------------------------------"
     echo "Building kernel using "$KERNEL_DEFCONFIG""
     echo "Generating configuration file..."
     echo "-----------------------------------------------"
-    make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG $KSU || abort
+    make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG $RECOVERY $KSU || abort
 
     echo "Building kernel..."
     echo "-----------------------------------------------"
@@ -142,6 +161,10 @@ build_kernel() {
 }
 
 build_boot() {
+
+    cp -a out/arch/arm64/boot/Image build/out/$MODEL
+
+    if [ -z "$RECOVERY" ]; then
     echo "-----------------------------------------------"
     echo "Building boot.img RAMDisk..."
     mkdir -p build/out/$MODEL/boot_ramdisk00
@@ -156,8 +179,7 @@ build_boot() {
     echo "-----------------------------------------------"
     echo "Building boot.img..."
 
-    cp -a out/arch/arm64/boot/Image build/out/$MODEL
-
+    
     OUTPUT_FILE=build/out/$MODEL/boot.img
     RAMDISK_00=build/out/$MODEL/boot_ramdisk
     KERNEL=build/out/$MODEL/Image
@@ -168,6 +190,7 @@ build_boot() {
 
 	python3 toolchain/mkbootimg/mkbootimg.py --header_version $HEADER_VERSION --cmdline "$CMDLINE" --ramdisk $RAMDISK_00 \
 	--os_version $OS_VERSION --os_patch_level $OS_PATCH_LEVEL --kernel $KERNEL --output $OUTPUT_FILE || abort
+    fi
 }
 
 build_dtb() {
@@ -363,9 +386,12 @@ apply_ksu_susfs_patch
 build_kernel
 build_boot
 build_dtb
+
+if [ -z "$RECOVERY" ]; then
 build_modules
 build_vendor_boot
 build_zip
+fi
 
 popd > /dev/null
 echo "-----------------------------------------------"
