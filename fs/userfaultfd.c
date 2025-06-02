@@ -1498,7 +1498,7 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 		 * the next vma was merged into the current one and
 		 * the current one has not been updated yet.
 		 */
-		vm_write_begin(vma);Add commentMore actions
+		vm_write_begin(vma);
 		WRITE_ONCE(vma->vm_flags, vma_pad_fixup_flags(vma, new_flags));
 		vma->vm_userfaultfd_ctx.ctx = ctx;
 		vm_write_end(vma);
