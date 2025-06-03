@@ -14,4 +14,5 @@
 *.dts.reverse.dts
 
 build/out
-net/wireguard
+toolchain
+.patch_applied_ksu_susfs
