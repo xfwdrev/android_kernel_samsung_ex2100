@@ -2,16 +2,24 @@
 
 PATCH_MARKER=".patch_applied_ksu_susfs"
 PATCH_FILE="$PWD/patches/patch-susfs.patch"
+PATCH_FILE_MIN="$PWD/patches/patch_ksu_for_minimal_hooks.patch"
 PATCH_DIR="$PWD/KernelSU-Next"
 
 apply_ksu_susfs_patch() {
     if [[ "$KSU_OPTION" == "y" ]]; then
         if [ ! -f "$PATCH_MARKER" ]; then
+            echo "Applying minimal KernelSU patch (for hooks)..."
+            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
+                echo "Failed to apply minimal patch!"
+                exit 1
+            }
+
             echo "Applying SuSFS patch to KernelSU..."
             patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
                 echo "Failed to apply SuSFS patch!"
                 exit 1
             }
+
             touch "$PATCH_MARKER"
         else
             echo "SuSFS patch already applied. Skipping..."
