@@ -1919,21 +1919,11 @@ out_ret:
 	return retval;
 }
 
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-extern bool susfs_is_sus_su_hooks_enabled __read_mostly;
-extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
-				void *envp, int *flags);
-#endif
-
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-	if (susfs_is_sus_su_hooks_enabled)
-		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
-#endif
 	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
 }
 
@@ -2022,11 +2012,33 @@ void set_dumpable(struct mm_struct *mm, int value)
 	set_mask_bits(&mm->flags, MMF_DUMPABLE_MASK, value);
 }
 
+#ifdef CONFIG_KSU
+extern bool ksu_execveat_hook __read_mostly;
+extern __attribute__((hot)) int ksu_handle_execve_sucompat(int *fd,
+			       const char __user **filename_user,
+			       void *__never_use_argv, void *__never_use_envp,
+			       int *__never_use_flags);
+extern int ksu_handle_execve_ksud(const char __user *filename_user,
+			const char __user *const __user *__argv);
+#ifdef CONFIG_COMPAT  // 32-on-64 support
+extern int ksu_handle_compat_execve_ksud(const char __user *filename_user,
+			const compat_uptr_t __user *__argv);
+#endif
+#endif
+
 SYSCALL_DEFINE3(execve,
 		const char __user *, filename,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
+
+#ifdef CONFIG_KSU
+	if (unlikely(ksu_execveat_hook))
+		ksu_handle_execve_ksud(filename, argv);
+	else
+		ksu_handle_execve_sucompat((int *)AT_FDCWD, &filename, NULL, NULL, NULL);
+#endif
+
 #ifdef CONFIG_KDP_CRED
 	struct filename *path = getname(filename);
 	int error = PTR_ERR(path);
@@ -2071,6 +2083,12 @@ COMPAT_SYSCALL_DEFINE3(execve, const char __user *, filename,
 	const compat_uptr_t __user *, argv,
 	const compat_uptr_t __user *, envp)
 {
+#ifdef CONFIG_KSU // 32-bit su and 32-on-64 support
+	if (unlikely(ksu_execveat_hook))
+		ksu_handle_compat_execve_ksud(filename, argv);
+	else
+		ksu_handle_execve_sucompat((int *)AT_FDCWD, &filename, NULL, NULL, NULL);
+#endif
 	return compat_do_execve(getname(filename), argv, envp);
 }
 
