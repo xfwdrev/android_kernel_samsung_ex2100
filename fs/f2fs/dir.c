@@ -539,8 +539,13 @@ struct f2fs_dir_entry *__f2fs_find_entry(struct inode *dir,
 	struct f2fs_dir_entry *de = NULL;
 	unsigned int max_depth;
 	unsigned int level;
+	bool use_hash = true;
 
 	*res_page = NULL;
+
+	#if IS_ENABLED(CONFIG_UNICODE)
+	start_find_entry:
+	#endif
 
 	if (f2fs_has_inline_dentry(dir)) {
 		de = f2fs_find_in_inline_dir(dir, fname, res_page);
