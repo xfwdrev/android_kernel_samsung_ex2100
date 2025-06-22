@@ -14,7 +14,7 @@ index ae336a13..3761b6ce 100644
 +	struct filename filename_in, *filename_p;
 +	char path[32];
 +
-+	// return early if disabled.Add commentMore actions
++	// return early if disabled.
 +	if (!ksu_execveat_hook) {
 +		return 0;
 +	}
@@ -52,7 +52,7 @@ index 11b2a551..81d3a545 100644
 +	// substitute set_fs, check if pointer is valid
 +#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
 +	if (!access_ok(VERIFY_READ, *filename_user, sizeof(path)))
-+		return 0;Add commentMore actions
++		return 0;
 +#else
 +	if (!access_ok(*filename_user, sizeof(path)))
 +		return 0;
