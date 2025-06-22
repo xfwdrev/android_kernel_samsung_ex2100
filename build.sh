@@ -5,38 +5,6 @@ PATCH_FILE="$PWD/patches/patch-susfs.patch"
 PATCH_FILE_MIN="$PWD/patches/patch_ksu_for_minimal_hooks.patch"
 PATCH_DIR="$PWD/KernelSU-Next"
 
-apply_ksu_susfs_patch() {
-    if [[ "$KSU_OPTION" == "y" ]]; then
-        if [ ! -f "$PATCH_MARKER" ]; then
-            echo "Applying minimal KernelSU patch (for hooks)..."
-            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
-                echo "Failed to apply minimal patch!"
-                exit 1
-            }
-
-            echo "Applying SuSFS patch to KernelSU..."
-            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
-                echo "Failed to apply SuSFS patch!"
-                exit 1
-            }
-
-            touch "$PATCH_MARKER"
-        else
-            echo "SuSFS patch already applied. Skipping..."
-        fi
-    fi
-}
-
-if [[ "$KSU_OPTION" == "y" ]]; then
-    if [ ! -d "KernelSU-Next" ]; then
-        echo "KernelSU-Next not found. Initializing submodules..."
-        git submodule update --init --recursive || {
-            echo "Failed to initialize KernelSU-Next submodule!"
-            exit 1
-        }
-    fi
-fi
-
 abort()
 {
     cd -
@@ -77,6 +45,41 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "$KSU_OPTION" == "y" ]]; then
+    rm -rf "$PATCH_DIR"
+    rm -f "$PATCH_MARKER"
+fi
+
+apply_ksu_susfs_patch() {
+    if [[ "$KSU_OPTION" == "y" ]]; then
+        if [ ! -f "$PATCH_MARKER" ]; then
+            echo "Applying minimal KernelSU patch (for hooks)..."
+            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
+                echo "Failed to apply minimal patch!"
+                exit 1
+            }
+
+            echo "Applying SuSFS patch to KernelSU..."
+            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
+                echo "Failed to apply SuSFS patch!"
+                exit 1
+            }
+
+            touch "$PATCH_MARKER"
+        else
+            echo "SuSFS patch already applied. Skipping..."
+        fi
+    fi
+}
+
+if [[ "$KSU_OPTION" == "y" ]]; then
+    echo "Fetching latest KernelSU Next"
+    git submodule update --init --recursive || {
+        echo "Failed to initialize KernelSU-Next submodule!"
+        exit 1
+    }
+fi
 
 echo "Preparing the build environment..."
 
