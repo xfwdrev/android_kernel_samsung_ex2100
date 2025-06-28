@@ -54,6 +54,14 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/namei.h>
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+extern bool susfs_is_sus_android_data_d_name_found(const char *d_name);
+extern bool susfs_is_sus_sdcard_d_name_found(const char *d_name);
+extern bool susfs_is_inode_sus_path(struct inode *inode);
+extern bool susfs_is_base_dentry_android_data_dir(struct dentry* base);
+extern bool susfs_is_base_dentry_sdcard_dir(struct dentry* base);
+#endif
+
 /* [Feb-1997 T. Schoebel-Theuer]
  * Fundamental changes in the pathname lookup mechanisms (namei)
  * were necessary because of omirr.  The reason is that omirr needs
@@ -502,6 +510,9 @@ struct nameidata {
 	struct path	root;
 	struct inode	*inode; /* path.dentry.d_inode */
 	unsigned int	flags;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+  	unsigned int  state;
+#endif
 	unsigned	seq, m_seq;
 	int		last_type;
 	unsigned	depth;
@@ -1647,6 +1658,27 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 	return dentry;
 }
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+static inline int susfs_inode_permission(struct inode *inode, unsigned int flags) {
+	int error;
+	int mask = MAY_EXEC;
+	if (flags & (LOOKUP_CREATE | LOOKUP_EXCL | LOOKUP_RENAME_TARGET)) {
+		mask |= MAY_WRITE;
+	}
+	if (flags & LOOKUP_OPEN) {
+		mask |= MAY_OPEN;
+	}
+	if (flags & LOOKUP_RCU) {
+		mask |= MAY_NOT_BLOCK;
+	}
+	error = inode_permission(inode, mask);
+	if (error) {
+		return error;
+	}
+	return -ENOENT;
+}
+#endif
+
 /*
  * Parent directory has inode locked exclusive.  This is one
  * and only case when ->lookup() gets called on non in-lookup
@@ -1661,8 +1693,28 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 	struct dentry *old;
 	struct inode *dir = base->d_inode;
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (susfs_is_base_dentry_android_data_dir(base) &&
+		susfs_is_sus_android_data_d_name_found(name->name))
+	{
+		if (flags & (LOOKUP_CREATE | LOOKUP_EXCL)) {
+			return ERR_PTR(-EACCES);
+		}
+		return ERR_PTR(susfs_inode_permission(base->d_inode, flags));
+	}
+#endif
+
 	if (dentry)
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	{
+		if (!IS_ERR(dentry) && dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
+			return ERR_PTR(susfs_inode_permission(base->d_inode, flags));
+		}
 		return dentry;
+	}
+#else
+		return dentry;
+#endif
 
 	/* Don't create child dentry for a dead directory. */
 	if (unlikely(IS_DEADDIR(dir)))
@@ -1678,9 +1730,8 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 		dentry = old;
 	}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	if (!IS_ERR(dentry) && dentry->d_inode && unlikely(dentry->d_inode->i_state & INODE_STATE_SUS_PATH) && likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC)) {
-		dput(dentry);
-		return ERR_PTR(-ENOENT);
+	if (dentry && !IS_ERR(dentry) && dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
+		return ERR_PTR(susfs_inode_permission(dir, flags));
 	}
 #endif
 	return dentry;
@@ -2219,10 +2270,23 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	for(;;) {
 		u64 hash_len;
 		int type;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		struct dentry *dentry;
+#endif
 
 		err = may_lookup(nd);
 		if (err)
 			return err;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		dentry = nd->path.dentry;
+		if (dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
+			err = susfs_inode_permission(dentry->d_parent->d_inode, nd->flags);
+			if (err) {
+				return err;
+			}
+			return -ENOENT;
+		}
+#endif
 
 		hash_len = hash_name(nd->path.dentry, name);
 
@@ -2248,6 +2312,40 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 				hash_len = this.hash_len;
 				name = this.name;
 			}
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+			if (parent->d_inode) {
+				if (susfs_is_base_dentry_sdcard_dir(parent) &&
+					susfs_is_sus_sdcard_d_name_found(name))
+				{
+					if (nd->state & ND_STATE_RENAMEAT) {
+						do {
+							name++;
+						} while (likely(*name != '/') && *name != '\0');
+						while (*name=='/')
+							name++;
+						if (!*name) {
+							return -EPERM;
+						}
+						return -ENOENT;
+					} else if (nd->state & ND_STATE_FILENAME_CREATE) {
+						if (nd->last.name[nd->last.len] && !(nd->flags & LOOKUP_DIRECTORY)) {
+							return -ENOENT;
+						} else {
+							do {
+								name++;
+							} while (likely(*name != '/') && *name != '\0');
+							while (*name=='/')
+								name++;
+							if (!*name) {
+								return -EACCES;
+							}
+							return -ENOENT;
+						}
+					}
+					return -ENOENT;
+				}
+			}
+#endif
 		}
 
 		nd->last.hash_len = hash_len;
@@ -2452,6 +2550,9 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 {
 	const char *s = path_init(nd, flags);
 	int err;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	struct dentry *dentry;
+#endif
 
 	if (unlikely(flags & LOOKUP_DOWN) && !IS_ERR(s)) {
 		err = handle_lookup_down(nd);
@@ -2463,6 +2564,18 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		&& ((err = lookup_last(nd)) > 0)) {
 		s = trailing_symlink(nd);
 	}
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	dentry = nd->path.dentry;
+	if (!err && dentry && !IS_ERR(dentry) && dentry->d_inode) {
+		if (susfs_is_inode_sus_path(dentry->d_inode)) {
+			err = susfs_inode_permission(dentry->d_parent->d_inode, nd->flags);
+			if (!err) {
+				err = -ENOENT;
+			}
+			goto orig_flow;
+		}
+	}
+#endif
 	if (!err)
 		err = complete_walk(nd);
 
@@ -2474,6 +2587,9 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		nd->path.mnt = NULL;
 		nd->path.dentry = NULL;
 	}
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+orig_flow:
+#endif
 	terminate_walk(nd);
 	return err;
 }
@@ -2515,6 +2631,18 @@ static int path_parentat(struct nameidata *nd, unsigned flags,
 {
 	const char *s = path_init(nd, flags);
 	int err = link_path_walk(s, nd);
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	struct dentry *dentry = nd->path.dentry;
+	if (!err && dentry && !IS_ERR(dentry) && dentry->d_inode) {
+		if (dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
+			err = susfs_inode_permission(dentry->d_parent->d_inode, nd->flags);
+			if (!err) {
+				err = -ENOENT;
+			}
+			goto orig_flow;
+		}
+	}
+#endif
 	if (!err)
 		err = complete_walk(nd);
 	if (!err) {
@@ -2522,6 +2650,9 @@ static int path_parentat(struct nameidata *nd, unsigned flags,
 		nd->path.mnt = NULL;
 		nd->path.dentry = NULL;
 	}
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+orig_flow:
+#endif
 	terminate_walk(nd);
 	return err;
 }
@@ -2536,6 +2667,14 @@ static struct filename *filename_parentat(int dfd, struct filename *name,
 	if (IS_ERR(name))
 		return name;
 	set_nameidata(&nd, dfd, name);
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (flags & LOOKUP_FILENAME_CREATE) {
+		nd.state |= ND_STATE_FILENAME_CREATE;
+	}
+	if (flags & LOOKUP_RENAMEAT) {
+		nd.state |= ND_STATE_RENAMEAT;
+	}
+#endif
 	retval = path_parentat(&nd, flags | LOOKUP_RCU, parent);
 	if (unlikely(retval == -ECHILD))
 		retval = path_parentat(&nd, flags, parent);
@@ -3420,6 +3559,15 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 		dentry = NULL;
 	}
 	if (dentry->d_inode) {
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		if (susfs_is_inode_sus_path(dentry->d_inode)) {
+			error = susfs_inode_permission(dir_inode, nd->flags);
+			if (error) {
+				return error;
+			}
+			return -ENOENT;
+		}
+#endif
 		/* Cached positive dentry: will open in f_op->open */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 		if (unlikely(dentry->d_inode->i_state & INODE_STATE_SUS_PATH) && likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC)) {
@@ -3470,13 +3618,14 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 		if (unlikely(error == -ENOENT) && create_error)
 			error = create_error;
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		if (!IS_ERR(dentry) && dentry->d_inode && unlikely(dentry->d_inode->i_state & INODE_STATE_SUS_PATH) && likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC)) {
-			if (create_error) {
-				dput(dentry);
-				return create_error;
+		if (dentry && !IS_ERR(dentry) && dentry->d_inode) {
+			if (susfs_is_inode_sus_path(dentry->d_inode)) {
+				error = susfs_inode_permission(dir_inode, nd->flags);
+				if (error) {
+					return error;
+				}
+				return -ENOENT;
 			}
-			dput(dentry);
-			return -ENOENT;
 		}
 #endif
 		return error;
@@ -3495,9 +3644,14 @@ no_open:
 			dput(dentry);
 			dentry = res;
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-			if (dentry->d_inode && unlikely(dentry->d_inode->i_state & INODE_STATE_SUS_PATH) && likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC)) {
-				dput(dentry);
-				return -ENOENT;
+			if (dentry && !IS_ERR(dentry) && dentry->d_inode) {
+				if (susfs_is_inode_sus_path(dentry->d_inode)) {
+					error = susfs_inode_permission(dir_inode, nd->flags);
+					if (error) {
+						return error;
+					}
+					return -ENOENT;
+				}
 			}
 #endif
 		}
@@ -3548,6 +3702,9 @@ static int do_last(struct nameidata *nd,
 	struct inode *inode;
 	struct path path;
 	int error;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	struct dentry *dentry;
+#endif
 
 	nd->flags &= ~LOOKUP_PARENT;
 	nd->flags |= op->intent;
@@ -3558,6 +3715,18 @@ static int do_last(struct nameidata *nd,
 			return error;
 		goto finish_open;
 	}
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (dir->d_inode) {
+		if (susfs_is_inode_sus_path(dir->d_inode)) {
+			error = susfs_inode_permission(dir->d_parent->d_inode, nd->flags);
+			if (error) {
+				return error;
+			}
+			return -ENOENT;
+		}
+	}
+#endif
 
 	if (!(open_flag & O_CREAT)) {
 		if (nd->last.name[nd->last.len])
@@ -3665,6 +3834,18 @@ finish_lookup:
 	error = step_into(nd, &path, 0, inode, seq);
 	if (unlikely(error))
 		return error;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	dentry = nd->path.dentry;
+	if (dentry && !IS_ERR(dentry) && dentry->d_inode) {
+		if (susfs_is_inode_sus_path(dentry->d_inode)) {
+			error = susfs_inode_permission(dentry->d_parent->d_inode, nd->flags);
+			if (error) {
+				error;
+			}
+			return -ENOENT;
+		}
+	}
+#endif
 finish_open:
 	/* Why this, you ask?  _Now_ we might have grown LOOKUP_JUMPED... */
 	error = complete_walk(nd);
@@ -3924,6 +4105,9 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 	 * other flags passed in are ignored!
 	 */
 	lookup_flags &= LOOKUP_REVAL;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	lookup_flags |= LOOKUP_FILENAME_CREATE;
+#endif
 
 	name = filename_parentat(dfd, name, lookup_flags, path, &last, &type);
 	if (IS_ERR(name))
@@ -4907,6 +5091,9 @@ retry:
 		goto exit;
 	}
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	lookup_flags |= LOOKUP_RENAMEAT;
+#endif
 	to = filename_parentat(newdfd, getname(newname), lookup_flags,
 				&new_path, &new_last, &new_type);
 	if (IS_ERR(to)) {

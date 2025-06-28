@@ -49,6 +49,8 @@ extern bool susfs_is_current_zygote_domain(void);
 
 static DEFINE_IDA(susfs_mnt_id_ida);
 static DEFINE_IDA(susfs_mnt_group_ida);
+static int susfs_mnt_id_start = DEFAULT_SUS_MNT_ID;
+static int susfs_mnt_group_start = DEFAULT_SUS_MNT_GROUP_ID;
 
 #define CL_ZYGOTE_COPY_MNT_NS BIT(24) /* used by copy_mnt_ns() */
 #define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
@@ -3829,6 +3831,15 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	else
 		retval = do_new_mount(&path, type_page, sb_flags, mnt_flags,
 				      dev_name, data_page);
+#ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
+	// For both Legacy and Magic Mount KernelSU
+	if (!retval && susfs_is_auto_add_sus_ksu_default_mount_enabled &&
+			(!(flags & (MS_REMOUNT | MS_BIND | MS_SHARED | MS_PRIVATE | MS_SLAVE | MS_UNBINDABLE)))) {
+		if (susfs_is_current_ksu_domain()) {
+			susfs_auto_add_sus_ksu_default_mount(dir_name);
+		}
+	}
+#endif
 dput_out:
 #if defined(CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT) && defined(CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT)
 	// Just for the compatibility of Magic Mount KernelSU

@@ -37,6 +37,10 @@ extern void susfs_sus_ino_for_generic_fillattr(unsigned long ino, struct kstat *
  * found on the VFS inode structure.  This is the default if no getattr inode
  * operation is supplied.
  */
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern void susfs_sus_ino_for_generic_fillattr(unsigned long ino, struct kstat *stat);
+#endif
+
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
