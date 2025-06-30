@@ -1,6 +1,5 @@
 #!/bin/bash
 
-PATCH_MARKER=".patch_applied_ksu_susfs"
 PATCH_FILE="$PWD/patches/patch-susfs.patch"
 PATCH_FILE_MIN="$PWD/patches/patch_ksu_for_minimal_hooks.patch"
 PATCH_DIR="$PWD/KernelSU-Next"
@@ -46,45 +45,33 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "$KSU_OPTION" == "y" ]]; then
-    rm -rf "$PATCH_DIR"
-    rm -f "$PATCH_MARKER"
-fi
-
 apply_ksu_susfs_patch() {
-    if [[ "$KSU_OPTION" == "y" ]]; then
-        if [ ! -f "$PATCH_MARKER" ]; then
-            echo "Applying minimal KernelSU patch (for hooks)..."
-            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
-                echo "Failed to apply minimal patch!"
-                exit 1
-            }
 
-            echo "Applying SuSFS patch to KernelSU..."
-            patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
-                echo "Failed to apply SuSFS patch!"
-                exit 1
-            }
+    rm -rf "$PATCH_DIR"
 
-            touch "$PATCH_MARKER"
-        else
-            echo "SuSFS patch already applied. Skipping..."
-        fi
-    fi
+        echo "Fetching latest KernelSU Next"
+        git submodule update --init --recursive || {
+            echo "Failed to initialize KernelSU-Next submodule!"
+            exit 1
+        }
+
+        echo "Applying minimal KernelSU Next patch hooks..."
+        patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
+            echo "Failed to apply minimal hooks patch!"
+            exit 1
+        }
+
+        echo "Applying SuSFS patch to KernelSU Next..."
+        patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
+            echo "Failed to apply SuSFS patch!"
+            exit 1
+        }
 }
-
-if [[ "$KSU_OPTION" == "y" ]]; then
-    echo "Fetching latest KernelSU Next"
-    git submodule update --init --recursive || {
-        echo "Failed to initialize KernelSU-Next submodule!"
-        exit 1
-    }
-fi
 
 echo "Preparing the build environment..."
 
 pushd $(dirname "$0") > /dev/null
-CORES=`cat /proc/cpuinfo | grep -c processor`
+CORES=$(nproc)
 
 # Define toolchain variables
 CLANG_DIR=$PWD/toolchain/clang-r547379
@@ -404,7 +391,10 @@ build_zip() {
     popd > /dev/null
 }
 
+if [[ "$KSU_OPTION" == "y" ]]; then
 apply_ksu_susfs_patch
+fi
+
 build_kernel
 build_boot
 build_dtb
