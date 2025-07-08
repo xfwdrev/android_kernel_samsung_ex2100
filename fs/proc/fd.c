@@ -97,11 +97,21 @@ static int seq_show(struct seq_file *m, void *v)
 			bypass_orig_flow:
 	#else
 
+		#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+			mnt = real_mount(file->f_path.mnt);
+			if (likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) &&
+					mnt->mnt_id >= DEFAULT_SUS_MNT_ID) {
+				for (; mnt->mnt_id >= DEFAULT_SUS_MNT_ID; mnt = mnt->mnt_parent) { }
+			}
+			seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\n",
+					(long long)file->f_pos, f_flags,
+					mnt->mnt_id);
+		#else
+			seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\n",
+				(long long)file->f_pos, f_flags,
+				real_mount(file->f_path.mnt)->mnt_id);
+		#endif
 
-	seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\n",
-		   (long long)file->f_pos, f_flags,
-		   real_mount(file->f_path.mnt)->mnt_id);
-	
 	#endif
 
 	show_fd_locks(m, file, files);
