@@ -1000,7 +1000,7 @@ index 2307e665..85089e01 100644
 +#ifdef CONFIG_KSU_SUSFS
 +	else {
 +		task_lock(current);
-+		current->susfs_task_state |= TASK_STRUCT_NON_ROOT_USER_APP_PROC;
++		susfs_set_current_non_root_user_app_proc();
 +		task_unlock(current);
 +	}
 +#endif
