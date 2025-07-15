@@ -40,15 +40,13 @@ struct st_susfs_sus_path_list {
 };
 
 struct st_android_data_path {
-	unsigned long                    i_ino;
-	unsigned long                    s_magic;
 	char                             pathname[SUSFS_MAX_LEN_PATHNAME];
+	bool                             is_inited;
 };
 
 struct st_sdcard_path {
-	unsigned long                    i_ino;
-	unsigned long                    s_magic;
 	char                             pathname[SUSFS_MAX_LEN_PATHNAME];
+	bool                             is_inited;
 };
 #endif
 
