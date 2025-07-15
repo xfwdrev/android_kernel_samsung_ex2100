@@ -1,16 +1,16 @@
-From 09d04a5bc9c7b62b7c366deaf9dded80c0b64d1a Mon Sep 17 00:00:00 2001
+From 5bdcdd330aa2a926946164a8e63685facc6aaf8a Mon Sep 17 00:00:00 2001
 From: sidex15 <24408329+sidex15@users.noreply.github.com>
-Date: Mon, 16 Jun 2025 18:42:46 +0800
+Date: Thu, 26 Jun 2025 14:31:13 +0800
 Subject: [PATCH] kernel: implement susfs v1.5.8 KernelSU Next v1.0.8
 
 ---
  .gitignore               |   3 +
- kernel/Kconfig           | 134 ++++++++++
- kernel/Makefile          |  77 ++++++
+ kernel/Kconfig           | 134 +++++++++
+ kernel/Makefile          |  77 +++++
  kernel/allowlist.c       |  10 +-
  kernel/apk_sign.c        |   2 +-
  kernel/apk_sign.h        |   2 +-
- kernel/core_hook.c       | 543 ++++++++++++++++++++++++++++++++++++++-
+ kernel/core_hook.c       | 586 +++++++++++++++++++++++++++++++++++++--
  kernel/kernel_compat.c   |  10 +
  kernel/kernel_compat.h   |   1 +
  kernel/ksu.c             |  16 +-
@@ -20,10 +20,10 @@ Subject: [PATCH] kernel: implement susfs v1.5.8 KernelSU Next v1.0.8
  kernel/selinux/rules.c   |  16 +-
  kernel/selinux/selinux.c |  95 ++++++-
  kernel/selinux/selinux.h |  24 +-
- kernel/sucompat.c        |  89 ++++++-
+ kernel/sucompat.c        |  89 +++++-
  kernel/throne_tracker.c  |   4 +-
  kernel/throne_tracker.h  |   2 +-
- 19 files changed, 990 insertions(+), 63 deletions(-)
+ 19 files changed, 1022 insertions(+), 74 deletions(-)
 
 diff --git a/.gitignore b/.gitignore
 index 706fd07f..cf9cce53 100644
@@ -339,7 +339,7 @@ index bed501c4..e02aa514 100644
  
  #endif
 diff --git a/kernel/core_hook.c b/kernel/core_hook.c
-index 2307e665..85089e01 100644
+index 2307e665..90af003e 100644
 --- a/kernel/core_hook.c
 +++ b/kernel/core_hook.c
 @@ -35,6 +35,10 @@
@@ -936,7 +936,7 @@ index 2307e665..85089e01 100644
  {
  	struct path path;
  	int err = kern_path(mnt, 0, &path);
-@@ -579,12 +1044,35 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
+@@ -579,12 +1044,43 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
  		return;
  	}
  
@@ -966,13 +966,21 @@ index 2307e665..85089e01 100644
 +	ksu_try_umount("/data/adb/modules", false, MNT_DETACH, uid);
 +	/* For both Legacy KSU and Magic Mount KSU */
 +	ksu_try_umount("/debug_ramdisk", true, MNT_DETACH, uid);
++	ksu_try_umount("/sbin", false, MNT_DETACH, uid);
++
++	// try umount hosts file
++	ksu_try_umount("/system/etc/hosts", false, MNT_DETACH, uid);
++
++	// try umount lsposed dex2oat bins
++	ksu_try_umount("/apex/com.android.art/bin/dex2oat64", false, MNT_DETACH, uid);
++	ksu_try_umount("/apex/com.android.art/bin/dex2oat32", false, MNT_DETACH, uid);
 +}
 +#endif
 +
  int ksu_handle_setuid(struct cred *new, const struct cred *old)
  {
  	// this hook is used for umounting overlayfs for some uid, if there isn't any module mounted, just ignore it!
-@@ -604,6 +1092,20 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -604,6 +1100,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  		return 0;
  	}
  
@@ -988,12 +996,23 @@ index 2307e665..85089e01 100644
 +			}
 +		}
 +	}
++	// - here we check if uid is a isolated service spawned by zygote directly
++	// - Apps that do not use "useAppZyogte" to start a isolated service will be directly
++	//   spawned by zygote which KSU will ignore it by default, the only fix for now is to
++	//   force a umount for those uid
++	// - Therefore make sure your root app doesn't use isolated service for root access
++	if (new_uid.val >= 90000 && new_uid.val < 1000000) {
++			task_lock(current);
++			susfs_set_current_non_root_user_app_proc();
++			task_unlock(current);
++			goto out_susfs_try_umount_all;
++	}
 +#endif
 +
  	if (!is_appuid(new_uid) || is_unsupported_uid(new_uid.val)) {
  		// pr_info("handle setuid ignore non application or isolated uid: %d\n", new_uid.val);
  		return 0;
-@@ -613,7 +1115,17 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -613,7 +1134,18 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  		// pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
  		return 0;
  	}
@@ -1002,6 +1021,7 @@ index 2307e665..85089e01 100644
 +		task_lock(current);
 +		susfs_set_current_non_root_user_app_proc();
 +		task_unlock(current);
++		goto out_susfs_try_umount_all;
 +	}
 +#endif
  
@@ -1011,7 +1031,7 @@ index 2307e665..85089e01 100644
  	if (!ksu_uid_should_umount(new_uid.val)) {
  		return 0;
  	} else {
-@@ -622,10 +1134,12 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -622,10 +1154,12 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  #endif
  	}
  
@@ -1025,21 +1045,45 @@ index 2307e665..85089e01 100644
  	if (!is_zygote_child) {
  		pr_info("handle umount ignore non zygote child: %d\n",
  			current->pid);
-@@ -637,6 +1151,10 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -637,25 +1171,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  		current->pid);
  #endif
  
 +#ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
++out_susfs_try_umount_all:
 +	// susfs come first, and lastly umount by ksu, make sure umount in reversed order
 +	susfs_try_umount_all(new_uid.val);
 +#else
  	// fixme: use `collect_mounts` and `iterate_mount` to iterate all mountpoint and
  	// filter the mountpoint whose target is `/data/adb`
- 	try_umount("/odm", true, 0);
-@@ -656,6 +1174,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+-	try_umount("/odm", true, 0);
+-	try_umount("/system", true, 0);
+-	try_umount("/system_ext", true, 0);
+-	try_umount("/vendor", true, 0);
+-	try_umount("/product", true, 0);
+-	try_umount("/data/adb/modules", false, MNT_DETACH);
++	ksu_try_umount("/odm", true, 0);
++	ksu_try_umount("/system", true, 0);
++	ksu_try_umount("/system_ext", true, 0);
++	ksu_try_umount("/vendor", true, 0);
++	ksu_try_umount("/product", true, 0);
++	ksu_try_umount("/data/adb/modules", false, MNT_DETACH);
+ 
+ 	// try umount ksu temp path
+-	try_umount("/debug_ramdisk", false, MNT_DETACH);
+-	try_umount("/sbin", false, MNT_DETACH);
++	ksu_try_umount("/debug_ramdisk", false, MNT_DETACH);
++	ksu_try_umount("/sbin", false, MNT_DETACH);
+ 
+ 	// try umount hosts file
+-	try_umount("/system/etc/hosts", false, MNT_DETACH);
++	ksu_try_umount("/system/etc/hosts", false, MNT_DETACH);
+ 
  	// try umount lsposed dex2oat bins
- 	try_umount("/apex/com.android.art/bin/dex2oat64", false, MNT_DETACH);
- 	try_umount("/apex/com.android.art/bin/dex2oat32", false, MNT_DETACH);
+-	try_umount("/apex/com.android.art/bin/dex2oat64", false, MNT_DETACH);
+-	try_umount("/apex/com.android.art/bin/dex2oat32", false, MNT_DETACH);
++	ksu_try_umount("/apex/com.android.art/bin/dex2oat64", false, MNT_DETACH);
++	ksu_try_umount("/apex/com.android.art/bin/dex2oat32", false, MNT_DETACH);
 +#endif
  
  	return 0;
@@ -1242,19 +1286,21 @@ diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
 index dc1ca5d4..727911ff 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
-@@ -36,9 +36,9 @@ static struct policydb *get_policydb(void)
- 	return db;
- }
+@@ -38,11 +38,11 @@
  
+ static DEFINE_MUTEX(ksu_rules);
+
 -void apply_kernelsu_rules()
 +void ksu_apply_kernelsu_rules()
  {
+	struct policydb *db;
+
 -	if (!getenforce()) {
 +	if (!ksu_getenforce()) {
  		pr_info("SELinux permissive or disabled, apply rules!\n");
  	}
  
-@@ -134,6 +134,14 @@ void apply_kernelsu_rules()
+@@ -139,6 +139,14 @@
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
  
@@ -1266,7 +1312,7 @@ index dc1ca5d4..727911ff 100644
 +	susfs_set_zygote_sid();
 +#endif
 +
- 	rcu_read_unlock();
+ 	mutex_unlock(&ksu_rules);
  }
  
 @@ -223,13 +231,13 @@ static void reset_avc_cache()
