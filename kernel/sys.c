@@ -1252,6 +1252,29 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
 	susfs_spoof_uname(&tmp);
 #endif
+
+#ifndef CONFIG_FAKE_UNAME_NONE
+	if (!strncmp(current->comm, "bpfloader", 9) ||
+	    !strncmp(current->comm, "netbpfload", 10) ||
+	    !strncmp(current->comm, "netd", 4) ||
+	    !strncmp(current->comm, "uprobestats", 11)) {
+#if defined(CONFIG_FAKE_UNAME_5_4)
+		strcpy(tmp.release, "5.4.200");
+#elif defined(CONFIG_FAKE_UNAME_5_10)
+		strcpy(tmp.release, "5.10.200");
+#elif defined(CONFIG_FAKE_UNAME_5_15)
+		strcpy(tmp.release, "5.15.200");
+#elif defined(CONFIG_FAKE_UNAME_6_1)
+		strcpy(tmp.release, "6.1.200");
+#elif defined(CONFIG_FAKE_UNAME_6_6)
+		strcpy(tmp.release, "6.6.200");
+#elif defined(CONFIG_FAKE_UNAME_6_12)
+		strcpy(tmp.release, "6.12.200");
+#endif
+		pr_debug("fake uname: %s/%d release=%s\n",
+			 current->comm, current->pid, tmp.release);
+	}
+#endif
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
