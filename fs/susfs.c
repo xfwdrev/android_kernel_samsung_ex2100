@@ -228,8 +228,8 @@ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
 	}
 
 	spin_lock(&inode->i_lock);
-	inode->i_state |= INODE_STATE_SUS_PATH;
-	SUSFS_LOGI("pathname: '%s', ino: '%lu', is flagged as INODE_STATE_SUS_PATH\n", resolved_pathname, info.target_ino);
+	set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+	SUSFS_LOGI("pathname: '%s', ino: '%lu', is flagged as AS_FLAGS_SUS_PATH\n", resolved_pathname, info.target_ino);
 	spin_unlock(&inode->i_lock);
 out_kfree_tmp_buf:
 	kfree(tmp_buf);
@@ -302,7 +302,7 @@ bool susfs_is_sus_sdcard_d_name_found(const char *d_name) {
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 bool susfs_is_inode_sus_path(struct mnt_idmap* idmap, struct inode *inode) {
-	if (unlikely(inode->i_state & INODE_STATE_SUS_PATH &&
+	if (unlikely(inode->i_mapping->flags & BIT_SUS_PATH &&
 		is_i_uid_not_allowed(i_uid_into_vfsuid(idmap, inode).val)))
 	{
 		SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
@@ -312,7 +312,7 @@ bool susfs_is_inode_sus_path(struct mnt_idmap* idmap, struct inode *inode) {
 }
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 bool susfs_is_inode_sus_path(struct inode *inode) {
-	if (unlikely(inode->i_state & INODE_STATE_SUS_PATH &&
+	if (unlikely(inode->i_mapping->flags & BIT_SUS_PATH &&
 		is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))
 	{
 		SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
@@ -322,7 +322,7 @@ bool susfs_is_inode_sus_path(struct inode *inode) {
 }
 #else
 bool susfs_is_inode_sus_path(struct inode *inode) {
-	if (unlikely(inode->i_state & INODE_STATE_SUS_PATH &&
+	if (unlikely(inode->i_mapping->flags & BIT_SUS_PATH &&
 		is_i_uid_not_allowed(inode->i_uid.val)))
 	{
 		SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
@@ -352,7 +352,7 @@ static void susfs_update_sus_mount_inode(char *target_pathname) {
 	/* It is important to check if the mount has a legit peer group id, if so we cannot add them to sus_mount,
 	 * since there are chances that the mount is a legit mountpoint, and it can be misued by other susfs functions in future.
 	 * And by doing this it won't affect the sus_mount check as other susfs functions check by mnt->mnt_id
-	 * instead of INODE_STATE_SUS_MOUNT.
+	 * instead of BIT_SUS_MOUNT.
 	 */
 	mnt = real_mount(p.mnt);
 	if (mnt->mnt_group_id > 0 && // 0 means no peer group
@@ -368,9 +368,9 @@ static void susfs_update_sus_mount_inode(char *target_pathname) {
 		return;
 	}
 
-	if (!(inode->i_state & INODE_STATE_SUS_MOUNT)) {
+	if (!(inode->i_mapping->flags & BIT_SUS_MOUNT)) {
 		spin_lock(&inode->i_lock);
-		inode->i_state |= INODE_STATE_SUS_MOUNT;
+		set_bit(AS_FLAGS_SUS_MOUNT, &inode->i_mapping->flags);
 		spin_unlock(&inode->i_lock);
 	}
 	path_put(&p);
@@ -440,9 +440,9 @@ int susfs_auto_add_sus_bind_mount(const char *pathname, struct path *path_target
 	}
 	inode = path_target->dentry->d_inode;
 	if (!inode) return 1;
-	if (!(inode->i_state & INODE_STATE_SUS_MOUNT)) {
+	if (!(inode->i_mapping->flags & BIT_SUS_MOUNT)) {
 		spin_lock(&inode->i_lock);
-		inode->i_state |= INODE_STATE_SUS_MOUNT;
+		set_bit(AS_FLAGS_SUS_MOUNT, &inode->i_mapping->flags);
 		spin_unlock(&inode->i_lock);
 		SUSFS_LOGI("set SUS_MOUNT inode state for source bind mount path '%s'\n", pathname);
 	}
@@ -484,9 +484,9 @@ set_inode_sus_mount:
 		goto out_path_put;
 		return;
 	}
-	if (!(inode->i_state & INODE_STATE_SUS_MOUNT)) {
+	if (!(inode->i_mapping->flags & BIT_SUS_MOUNT)) {
 		spin_lock(&inode->i_lock);
-		inode->i_state |= INODE_STATE_SUS_MOUNT;
+		set_bit(AS_FLAGS_SUS_MOUNT, &inode->i_mapping->flags);
 		spin_unlock(&inode->i_lock);
 		SUSFS_LOGI("set SUS_MOUNT inode state for default KSU mount path '%s'\n", pathname);
 	}
@@ -519,9 +519,9 @@ static int susfs_update_sus_kstat_inode(char *target_pathname) {
 		return 1;
 	}
 
-	if (!(inode->i_state & INODE_STATE_SUS_KSTAT)) {
+	if (!(inode->i_mapping->flags & BIT_SUS_KSTAT)) {
 		spin_lock(&inode->i_lock);
-		inode->i_state |= INODE_STATE_SUS_KSTAT;
+		set_bit(AS_FLAGS_SUS_KSTAT, &inode->i_mapping->flags);
 		spin_unlock(&inode->i_lock);
 	}
 	path_put(&p);
@@ -771,8 +771,8 @@ void susfs_auto_add_try_umount_for_bind_mount(struct path *path) {
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	if (path->dentry->d_inode->i_state & INODE_STATE_SUS_KSTAT) {
-		SUSFS_LOGI("skip adding path to try_umount list as its inode is flagged INODE_STATE_SUS_KSTAT already\n");
+	if (path->dentry->d_inode->i_mapping->flags & BIT_SUS_KSTAT) {
+		SUSFS_LOGI("skip adding path to try_umount list as its inode is flagged BIT_SUS_KSTAT already\n");
 		return;
 	}
 #endif
@@ -958,7 +958,7 @@ static int susfs_update_open_redirect_inode(struct st_susfs_open_redirect_hlist 
 	}
 
 	spin_lock(&inode_target->i_lock);
-	inode_target->i_state |= INODE_STATE_OPEN_REDIRECT;
+	set_bit(AS_FLAGS_OPEN_REDIRECT, &inode_target->i_mapping->flags);
 	spin_unlock(&inode_target->i_lock);
 
 out_path_put_target:
