@@ -141,6 +141,8 @@ struct ahash_alg {
 
 struct shash_desc {
 	struct crypto_shash *tfm;
+	u32 flags;
+
 	void *__ctx[] CRYPTO_MINALIGN_ATTR;
 };
 
