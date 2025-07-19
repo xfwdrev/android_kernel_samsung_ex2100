@@ -20,6 +20,7 @@ Usage: $(basename "$0") [options]
 Options:
     -m, --model [value]    Specify the model code of the phone
     -k, --ksu [y/N]        Include KernelSU
+    -s, --susfs [y/N]      Include SuSFS
     -r, --recovery [y/N]   Compile kernel for an Android Recovery																 
 EOF
 }
@@ -34,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             KSU_OPTION="$2"
             shift 2
             ;;
+        --susfs|-s)
+            SUSFS_OPTION="$2"
+            shift 2
+            ;;
         --recovery|-r)
             RECOVERY_OPTION="$2"
             shift 2
@@ -44,6 +49,23 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+apply_minimal_patch() {
+
+    rm -rf "$PATCH_DIR"
+
+        echo "Fetching latest KernelSU Next"
+        git submodule update --init --recursive || {
+            echo "Failed to initialize KernelSU-Next submodule!"
+            exit 1
+        }
+
+        echo "Applying minimal KernelSU Next patch hooks..."
+        patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
+            echo "Failed to apply minimal hooks patch!"
+            exit 1
+        }
+}
 
 apply_ksu_susfs_patch() {
 
@@ -135,6 +157,10 @@ if [[ "$KSU_OPTION" == "y" ]]; then
     KSU=ksu.config
 fi
 
+if [[ "$SUSFS_OPTION" == "y" ]]; then
+    SUSFS=susfs.config
+fi
+
 rm -rf build/out/$MODEL
 mkdir -p build/out/$MODEL/zip/files
 mkdir -p build/out/$MODEL/zip/META-INF/com/google/android
@@ -153,6 +179,11 @@ build_kernel() {
     else
         echo "KSU: $KSU"
     fi
+    if [ -z "$SUSFS" ]; then
+        echo "SUSFS: N"
+    else
+        echo "SUSFS: $SUSFS"
+    fi
     if [ -z "$RECOVERY" ]; then
     echo "Recovery: N"
     else
@@ -163,7 +194,7 @@ build_kernel() {
     echo "Building kernel using "$KERNEL_DEFCONFIG""
     echo "Generating configuration file..."
     echo "-----------------------------------------------"
-    make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG $RECOVERY $KSU || abort
+    make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG $RECOVERY $KSU $SUSFS || abort
 
     echo "Building kernel..."
     echo "-----------------------------------------------"
@@ -382,16 +413,22 @@ build_zip() {
     pushd build/out/$MODEL/zip > /dev/null
     DATE=`date +"%d-%m-%Y_%H-%M-%S"`
 
-    if [[ "$KSU_OPTION" == "y" ]]; then
-        NAME="$version"_"$MODEL"_UNOFFICIAL_KSU_"$DATE".zip
+    if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
+        NAME="${version}_${MODEL}_UNOFFICIAL_KSU_SUSFS_${DATE}.zip"
+    elif [[ "$KSU_OPTION" == "y" ]]; then
+        NAME="${version}_${MODEL}_UNOFFICIAL_KSU_${DATE}.zip"
     else
-        NAME="$version"_"$MODEL"_UNOFFICIAL_"$DATE".zip
+        NAME="${version}_${MODEL}_UNOFFICIAL_${DATE}.zip"
     fi
     zip -r -qq ../"$NAME" .
     popd > /dev/null
 }
 
 if [[ "$KSU_OPTION" == "y" ]]; then
+apply_minimal_patch
+fi
+
+if [[ "$SUSFS_OPTION" == "y" ]]; then
 apply_ksu_susfs_patch
 fi
 
