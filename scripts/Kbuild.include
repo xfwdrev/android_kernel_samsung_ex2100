@@ -264,5 +264,3 @@ endef
 
 # do not delete intermediate files automatically
 .SECONDARY:
-
-$(shell cd "$(srctree)" && ./scripts/fetch-latest-wireguard.sh)
