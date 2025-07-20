@@ -124,19 +124,15 @@ O=out
 # Define specific variables
 case $MODEL in
 r9s)
-    KERNEL_DEFCONFIG=chiclet_r9s_defconfig
     BOARD=SRPUG16A010KU
 ;;
 o1s)
-    KERNEL_DEFCONFIG=chiclet_o1s_defconfig
     BOARD=SRPTH19C011KU
 ;;
 t2s)
-    KERNEL_DEFCONFIG=chiclet_t2s_defconfig
     BOARD=SRPTG24B014KU
 ;;
 p3s)
-    KERNEL_DEFCONFIG=chiclet_p3s_defconfig
     BOARD=SRPTH19D013KU
 ;;
 *)
@@ -147,6 +143,7 @@ esac
 if [[ "$RECOVERY_OPTION" == "y" ]]; then
     RECOVERY=recovery.config
     KSU_OPTION=n
+    SUSFS_OPTION=n
 fi
 
 if [ -z $KSU_OPTION ]; then
@@ -173,6 +170,7 @@ build_kernel() {
     if [[ "$RECOVERY_OPTION" == "y" ]]; then
         RECOVERY=recovery.config
         KSU_OPTION=n
+        SUSFS_OPTION=n
     fi
     if [ -z "$KSU" ]; then
         echo "KSU: N"
@@ -194,7 +192,7 @@ build_kernel() {
     echo "Building kernel using "$KERNEL_DEFCONFIG""
     echo "Generating configuration file..."
     echo "-----------------------------------------------"
-    make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG $RECOVERY $KSU $SUSFS || abort
+    make ${MAKE_ARGS} -j$CORES exynos2100_defconfig $MODEL.config $RECOVERY $KSU $SUSFS || abort
 
     echo "Building kernel..."
     echo "-----------------------------------------------"
@@ -408,7 +406,7 @@ build_zip() {
     cp build/update-binary build/out/$MODEL/zip/META-INF/com/google/android/update-binary
     cp build/updater-script build/out/$MODEL/zip/META-INF/com/google/android/updater-script
 
-    version=$(grep -o 'CONFIG_LOCALVERSION="[^"]*"' arch/arm64/configs/$KERNEL_DEFCONFIG | cut -d '"' -f 2)
+    version=$(grep -o 'CONFIG_LOCALVERSION="[^"]*"' arch/arm64/configs/exynos2100_defconfig | cut -d '"' -f 2)
     version=${version:1}
     pushd build/out/$MODEL/zip > /dev/null
     DATE=`date +"%d-%m-%Y_%H-%M-%S"`
