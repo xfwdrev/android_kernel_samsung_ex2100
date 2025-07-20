@@ -84,6 +84,26 @@ config ARCH_EXYNOS
 	help
 	  This enables support for ARMv8 based Samsung Exynos SoC family.
 
+config MODEL_O1S
+	bool "Samsung Galaxy S21 5G"
+	default n
+	depends on SOC_EXYNOS2100
+
+config MODEL_P3S
+	bool "Samsung Galaxy S21 Ultra 5G"
+	default n
+	depends on SOC_EXYNOS2100
+
+config MODEL_R9S
+	bool "Samsung Galaxy S21 FE 5G"
+	default n
+	depends on SOC_EXYNOS2100
+
+config MODEL_T2S
+	bool "Samsung Galaxy S21+ 5G"
+	default n
+	depends on SOC_EXYNOS2100
+
 config ARCH_K3
 	bool "Texas Instruments Inc. K3 multicore SoC architecture"
 	select PM_GENERIC_DOMAINS if PM
