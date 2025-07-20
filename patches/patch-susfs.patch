@@ -1109,6 +1109,22 @@ index 841a0e52..47d8f5e3 100644
  struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
  {
  #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+@@ -184,15 +184,6 @@
+ }
+ #endif
+ 
+-static inline int ksu_access_ok(const void *addr, unsigned long size)
+-{
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+-	return access_ok(addr, size);
+-#else
+-	return access_ok(VERIFY_READ, addr, size);
+-#endif
+-}
+-
+ long ksu_strncpy_from_user_retry(char *dst, const void __user *unsafe_addr,
+ 				   long count)
+ {
 diff --git a/kernel/kernel_compat.h b/kernel/kernel_compat.h
 index 6d79f7ed..b0d664a9 100644
 --- a/kernel/kernel_compat.h
