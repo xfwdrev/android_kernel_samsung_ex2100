@@ -6,7 +6,7 @@ dtbo-y += exynos/exynos2100-universal2100_rev02.dtbo
 dtb-y += exynos/exynos5433-tm2.dtb
 dtbo-y += exynos/exynos2100-smdk2100.dtbo
 dtb-y += exynos/exynos7-espresso.dtb
-dtb-$(CONFIG_SOC_EXYNO2100) += exynos/exynos2100.dtb
+dtb-$(CONFIG_SOC_EXYNOS2100) += exynos/exynos2100.dtb
 
 dtbo-$(CONFIG_MODEL_O1S) += samsung/o1s/o1s_eur_openx_w01_r02.dtbo
 dtbo-$(CONFIG_MODEL_O1S) += samsung/o1s/o1s_eur_openx_w01_r16.dtbo
