@@ -77,12 +77,6 @@ apply_ksu_susfs_patch() {
             exit 1
         }
 
-        echo "Applying minimal KernelSU Next patch hooks..."
-        patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
-            echo "Failed to apply minimal hooks patch!"
-            exit 1
-        }
-
         echo "Applying SuSFS patch to KernelSU Next..."
         patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
             echo "Failed to apply SuSFS patch!"
