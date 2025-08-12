@@ -36,6 +36,7 @@ bool susfs_is_log_enabled __read_mostly = true;
 
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+static LIST_HEAD(LH_SUS_PATH_LOOP);
 static LIST_HEAD(LH_SUS_PATH_ANDROID_DATA);
 static LIST_HEAD(LH_SUS_PATH_SDCARD);
 static struct st_android_data_path android_data_path = {0};
@@ -237,6 +238,111 @@ out_kfree_tmp_buf:
 out_path_put_path:
 	path_put(&path);
 	return err;
+}
+
+int susfs_add_sus_path_loop(struct st_susfs_sus_path* __user user_info) {
+	struct st_susfs_sus_path_list *cursor = NULL, *temp = NULL;
+	struct st_susfs_sus_path_list *new_list = NULL;
+	struct st_susfs_sus_path info;
+	struct path path;
+	struct inode *inode = NULL;
+	char *resolved_pathname = NULL, *tmp_buf = NULL;
+	int err = 0;
+
+	err = copy_from_user(&info, user_info, sizeof(info));
+	if (err) {
+		SUSFS_LOGE("failed copying from userspace\n");
+		return err;
+	}
+
+	err = kern_path(info.target_pathname, 0, &path);
+	if (err) {
+		SUSFS_LOGE("Failed opening file '%s'\n", info.target_pathname);
+		return err;
+	}
+
+	if (!path.dentry->d_inode) {
+		err = -EINVAL;
+		goto out_path_put_path;
+	}
+	inode = d_inode(path.dentry);
+
+	tmp_buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tmp_buf) {
+		err = -ENOMEM;
+		goto out_path_put_path;
+	}
+
+	resolved_pathname = d_path(&path, tmp_buf, PAGE_SIZE);
+	SUSFS_LOGI("resolved_pathname: %s\n", resolved_pathname);
+	if (!resolved_pathname) {
+		err = -ENOMEM;
+		goto out_kfree_tmp_buf;
+	}
+
+	if (susfs_starts_with(resolved_pathname, "/storage/")) {
+		err = -EINVAL;
+		SUSFS_LOGE("path starts with /storage and /sdcard cannot be added by add_sus_path_loop\n");
+		goto out_kfree_tmp_buf;
+	}
+
+	list_for_each_entry_safe(cursor, temp, &LH_SUS_PATH_LOOP, list) {
+		if (unlikely(!strcmp(cursor->info.target_pathname, resolved_pathname))) {
+			spin_lock(&susfs_spin_lock);
+			cursor->info.target_ino = info.target_ino;
+			strncpy(cursor->info.target_pathname, resolved_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
+			strncpy(cursor->target_pathname, resolved_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
+			cursor->info.i_uid = info.i_uid;
+			cursor->path_len = strlen(cursor->info.target_pathname);
+			SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s', i_uid: '%u', is successfully updated to LH_SUS_PATH_LOOP\n",
+						cursor->info.target_ino, cursor->target_pathname, cursor->info.i_uid);
+			spin_unlock(&susfs_spin_lock);
+			goto out_set_sus_path;
+		}
+	}
+	new_list = kmalloc(sizeof(struct st_susfs_sus_path_list), GFP_KERNEL);
+	if (!new_list) {
+		err = -ENOMEM;
+		goto out_kfree_tmp_buf;
+	}
+	new_list->info.target_ino = info.target_ino;
+	strncpy(new_list->info.target_pathname, resolved_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
+	strncpy(new_list->target_pathname, resolved_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
+	new_list->info.i_uid = info.i_uid;
+	new_list->path_len = strlen(new_list->info.target_pathname);
+	INIT_LIST_HEAD(&new_list->list);
+	spin_lock(&susfs_spin_lock);
+	list_add_tail(&new_list->list, &LH_SUS_PATH_LOOP);
+	SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s', i_uid: '%u', is successfully added to LH_SUS_PATH_LOOP\n",
+				new_list->info.target_ino, new_list->target_pathname, new_list->info.i_uid);
+	spin_unlock(&susfs_spin_lock);
+out_set_sus_path:
+	spin_lock(&inode->i_lock);
+	set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+	SUSFS_LOGI("pathname: '%s', ino: '%lu', is flagged as AS_FLAGS_SUS_PATH\n", resolved_pathname, info.target_ino);
+	spin_unlock(&inode->i_lock);
+out_kfree_tmp_buf:
+	kfree(tmp_buf);
+out_path_put_path:
+	path_put(&path);
+	return err;
+}
+
+void susfs_run_sus_path_loop(uid_t uid) {
+	struct st_susfs_sus_path_list *cursor = NULL, *temp = NULL;
+	struct path path;
+	struct inode *inode;
+
+	list_for_each_entry_safe(cursor, temp, &LH_SUS_PATH_LOOP, list) {
+		if (!kern_path(cursor->target_pathname, 0, &path)) {
+			inode = path.dentry->d_inode;
+			spin_lock(&inode->i_lock);
+			set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+			spin_unlock(&inode->i_lock);
+			path_put(&path);
+			SUSFS_LOGI("re-flag '%s' as SUS_PATH for uid: %u\n", cursor->target_pathname, uid);
+		}
+	}
 }
 
 static inline bool is_i_uid_in_android_data_not_allowed(uid_t i_uid) {
