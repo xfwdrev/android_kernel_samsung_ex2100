@@ -216,8 +216,8 @@ build_boot() {
     RAMDISK_00=build/out/$MODEL/boot_ramdisk
     KERNEL=build/out/$MODEL/Image
     HEADER_VERSION=3
-    OS_VERSION=11.0.0
-    OS_PATCH_LEVEL=2025-04
+    OS_VERSION=15.0.0
+    OS_PATCH_LEVEL=2025-08
     CMDLINE="androidboot.selinux=permissive loop.max_part=7"
 
 	python3 toolchain/mkbootimg/mkbootimg.py --header_version $HEADER_VERSION --cmdline "$CMDLINE" --ramdisk $RAMDISK_00 \
