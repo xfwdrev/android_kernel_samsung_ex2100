@@ -441,16 +441,15 @@ out:
 	return res;
 }
 
-#ifdef CONFIG_KSU
-extern __attribute__((hot)) int ksu_handle_faccessat(int *dfd, 
-			                    const char __user **filename_user, int *mode, int *flags);
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+extern __attribute__((hot, always_inline)) int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+			                    int *flags);
 #endif
-
 
 SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 {
-#ifdef CONFIG_KSU
- 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 #endif
 	return do_faccessat(dfd, filename, mode);
 }
