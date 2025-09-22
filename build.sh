@@ -50,32 +50,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-apply_minimal_patch() {
+refetch_ksu() {
 
     rm -rf "$PATCH_DIR"
 
         echo "Fetching latest KernelSU Next"
         git submodule update --init --recursive || {
             echo "Failed to initialize KernelSU-Next submodule!"
-            exit 1
-        }
-
-        echo "Applying minimal KernelSU Next patch hooks..."
-        patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE_MIN" || {
-            echo "Failed to apply minimal hooks patch!"
             exit 1
         }
 }
 
 apply_ksu_susfs_patch() {
-
-    rm -rf "$PATCH_DIR"
-
-        echo "Fetching latest KernelSU Next"
-        git submodule update --init --recursive || {
-            echo "Failed to initialize KernelSU-Next submodule!"
-            exit 1
-        }
 
         echo "Applying SuSFS patch to KernelSU Next..."
         patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
@@ -417,7 +403,7 @@ build_zip() {
 }
 
 if [[ "$KSU_OPTION" == "y" ]]; then
-apply_minimal_patch
+refetch_ksu
 fi
 
 if [[ "$SUSFS_OPTION" == "y" ]]; then
