@@ -1,12 +1,12 @@
-From 77494e0903562bb0480cb6b042baba8afbbdd814 Mon Sep 17 00:00:00 2001
+From b5f81639614ad82c01aaa900da5d3caadf890e83 Mon Sep 17 00:00:00 2001
 From: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
-Date: Mon, 6 Oct 2025 21:14:23 +0800
+Date: Mon, 6 Oct 2025 23:53:44 +0800
 Subject: [PATCH] kernel: implement susfs v1.5.11 KernelSU Next v1.1.1
 
 Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
 ---
  .gitignore               |   3 +
- kernel/Kconfig           | 137 ++++++++-
+ kernel/Kconfig           | 129 ++++++++-
  kernel/Makefile          |  63 ++++
  kernel/allowlist.c       |   8 +-
  kernel/core_hook.c       | 606 ++++++++++++++++++++++++++++++++++++++-
@@ -19,7 +19,7 @@ Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
  kernel/selinux/selinux.c |  92 ++++++
  kernel/selinux/selinux.h |  12 +
  kernel/sucompat.c        | 106 +++++--
- 14 files changed, 1040 insertions(+), 33 deletions(-)
+ 14 files changed, 1032 insertions(+), 33 deletions(-)
  create mode 120000 kernel/kernel
 
 diff --git a/.gitignore b/.gitignore
@@ -33,7 +33,7 @@ index 706fd07f..cf9cce53 100644
 +*.rej
 +*.patch
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index ab6dd5c9..11ebc166 100644
+index ab6dd5c9..1676d529 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -13,7 +13,7 @@ config KSU_KPROBES_HOOK
@@ -45,7 +45,7 @@ index ab6dd5c9..11ebc166 100644
  	help
  	  Disable if you use manual hooks.
  
-@@ -40,4 +40,139 @@ config KSU_LSM_SECURITY_HOOKS
+@@ -40,4 +40,131 @@ config KSU_LSM_SECURITY_HOOKS
  	  Disabling this is mostly only useful for kernel 4.1 and older.
  	  Make sure to implement manual hooks on security/security.c.
  
@@ -57,14 +57,6 @@ index ab6dd5c9..11ebc166 100644
 +    default y
 +    help
 +      Patch and Enable SUSFS to kernel with KernelSU.
-+
-+config KSU_SUSFS_HAS_MAGIC_MOUNT
-+    bool "Say yes if the current KernelSU repo has magic mount implemented (default y)"
-+    depends on KSU_SUSFS
-+    default y
-+    help
-+      - Enable to indicate that the current SUSFS kernel supports the auto hide features for 5ec1cff's Magic Mount KernelSU
-+      - Every mounts from /debug_ramdisk/workdir will be treated as magic mount and processed differently by susfs
 +
 +config KSU_SUSFS_SUS_PATH
 +    bool "Enable to hide suspicious path (NOT recommended)"
@@ -298,7 +290,7 @@ index bcdac3f0..c59be97c 100644
  	return ksu_queue_work(&ksu_save_work);
  }
 diff --git a/kernel/core_hook.c b/kernel/core_hook.c
-index 2ffc72aa..370c2873 100644
+index 2ffc72aa..1934648f 100644
 --- a/kernel/core_hook.c
 +++ b/kernel/core_hook.c
 @@ -35,6 +35,10 @@
