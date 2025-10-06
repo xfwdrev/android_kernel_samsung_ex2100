@@ -61,13 +61,14 @@ static int seq_show(struct seq_file *m, void *v)
 		
 		#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 			mnt = real_mount(file->f_path.mnt);
-			if (likely(susfs_is_current_non_root_user_app_proc()) &&
-					mnt->mnt_id >= DEFAULT_SUS_MNT_ID) {
+				if (likely(susfs_is_current_proc_umounted()) &&
+							mnt->mnt_id >= DEFAULT_KSU_MNT_ID)
+				{
 				struct path path;
 				char *pathname = kmalloc(PAGE_SIZE, GFP_KERNEL);
 				char *dpath;
 		
-				for (; mnt->mnt_id >= DEFAULT_SUS_MNT_ID; mnt = mnt->mnt_parent) { }
+				for (; mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent) { }
 		
 				if (!pathname) {
 					goto out_seq_printf;
