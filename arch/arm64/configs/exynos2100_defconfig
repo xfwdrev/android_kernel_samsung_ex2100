@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm64 5.4.294 Kernel Configuration
+# Linux/arm64 5.4.300 Kernel Configuration
 #
 CONFIG_CC_VERSION_TEXT="Android (13688100, +pgo, +bolt, +lto, +mlgo, based on r563880) clang version 21.0.0 (https://android.googlesource.com/toolchain/llvm-project 5e96669f06077099aa41290cdb4c5e6fa0f59349)"
 CONFIG_GCC_VERSION=0
@@ -22,7 +22,7 @@ CONFIG_THREAD_INFO_IN_TASK=y
 CONFIG_INIT_ENV_ARG_LIMIT=32
 # CONFIG_COMPILE_TEST is not set
 CONFIG_UAPI_HEADER_TEST=y
-CONFIG_LOCALVERSION="-ChicletKernel-UPSTREAM-v4"
+CONFIG_LOCALVERSION="-ChicletKernel-UPSTREAM-v4.1"
 # CONFIG_LOCALVERSION_AUTO is not set
 CONFIG_BUILD_SALT=""
 CONFIG_DEFAULT_HOSTNAME="(none)"
