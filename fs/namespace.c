@@ -442,10 +442,10 @@ static struct mount *alloc_vfsmnt(const char *name)
 #else
 		mnt->mnt_count = 1;
 		mnt->mnt_writers = 0;
+#endif
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 		// Make sure mnt->mnt.susfs_mnt_id_backup is initialized every time.
 		mnt->mnt.susfs_mnt_id_backup = 0;
-#endif //CONFIG_KSU_SUSFS_SUS_MOUNT
 #endif
 #ifdef CONFIG_KDP_NS
 		kdp_set_ns_data(((struct kdp_mount *)mnt)->mnt, NULL);
@@ -4093,7 +4093,9 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
 	if (user_ns != ns->user_ns)
 		copy_flags |= CL_SHARED_TO_SLAVE;
-
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	copy_flags |= CL_COPY_MNT_NS;
+#endif
 #ifdef CONFIG_KDP_NS
 	new = copy_tree(old, ((struct kdp_mount *)old)->mnt->mnt_root, copy_flags);
 #else
