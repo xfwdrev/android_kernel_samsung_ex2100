@@ -4987,8 +4987,8 @@ void susfs_reorder_mnt_id(void) {
 		if (mnt->mnt_id == DEFAULT_KSU_MNT_ID) {
 			continue;
 		}
-		mnt->mnt.susfs_mnt_id_backup = mnt->mnt_id;
-		mnt->mnt_id = first_mnt_id++;
+		WRITE_ONCE(mnt->mnt.susfs_mnt_id_backup, READ_ONCE(mnt->mnt_id));
+		WRITE_ONCE(mnt->mnt_id, first_mnt_id++);
 	}
 	put_mnt_ns(mnt_ns);
 }

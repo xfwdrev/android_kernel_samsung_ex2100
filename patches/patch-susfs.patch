@@ -1,15 +1,15 @@
-From b5f81639614ad82c01aaa900da5d3caadf890e83 Mon Sep 17 00:00:00 2001
+From dc059bee8be3c320d50bd0e3704eadc36bbc43f2 Mon Sep 17 00:00:00 2001
 From: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
-Date: Mon, 6 Oct 2025 23:53:44 +0800
-Subject: [PATCH] kernel: implement susfs v1.5.11 KernelSU Next v1.1.1
+Date: Sun, 19 Oct 2025 17:39:20 +0800
+Subject: [PATCH] kernel: implement susfs v1.5.12 KernelSU Next v1.1.1
 
 Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
 ---
  .gitignore               |   3 +
- kernel/Kconfig           | 129 ++++++++-
+ kernel/Kconfig           | 140 ++++++++-
  kernel/Makefile          |  63 ++++
  kernel/allowlist.c       |   8 +-
- kernel/core_hook.c       | 606 ++++++++++++++++++++++++++++++++++++++-
+ kernel/core_hook.c       | 624 ++++++++++++++++++++++++++++++++++++++-
  kernel/kernel            |   1 +
  kernel/kernel_compat.c   |  19 +-
  kernel/kernel_compat.h   |   1 +
@@ -19,7 +19,7 @@ Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
  kernel/selinux/selinux.c |  92 ++++++
  kernel/selinux/selinux.h |  12 +
  kernel/sucompat.c        | 106 +++++--
- 14 files changed, 1032 insertions(+), 33 deletions(-)
+ 14 files changed, 1061 insertions(+), 33 deletions(-)
  create mode 120000 kernel/kernel
 
 diff --git a/.gitignore b/.gitignore
@@ -33,7 +33,7 @@ index 706fd07f..cf9cce53 100644
 +*.rej
 +*.patch
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index ab6dd5c9..1676d529 100644
+index ab6dd5c9..2c3e8fde 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -13,7 +13,7 @@ config KSU_KPROBES_HOOK
@@ -45,7 +45,7 @@ index ab6dd5c9..1676d529 100644
  	help
  	  Disable if you use manual hooks.
  
-@@ -40,4 +40,131 @@ config KSU_LSM_SECURITY_HOOKS
+@@ -40,4 +40,142 @@ config KSU_LSM_SECURITY_HOOKS
  	  Disabling this is mostly only useful for kernel 4.1 and older.
  	  Make sure to implement manual hooks on security/security.c.
  
@@ -174,6 +174,17 @@ index ab6dd5c9..1676d529 100644
 +                the same as the su implementaion of non-gki kernel without kprobe supported.
 +      - Only apps with root access granted by ksu manager are allowed to get root.
 +
++config KSU_SUSFS_SUS_MAP
++    bool "Enable to hide some mmapped real file from different proc maps interfaces"
++    depends on KSU_SUSFS
++    default y
++    help
++      - Allow hiding mmapped real file from /proc/<pid>/[maps|smaps|smaps_rollup|map_files|mem|pagemap]
++      - It does NOT support hiding for anon memory.
++      - It does NOT hide any inline hooks or plt hooks cause by the injected library itself.
++      - It may not be able to evade detections by apps that implement a good injection detection.
++      - Effective only on zygote spawned umounted user app process.
++
 +endmenu
 +
  endmenu
@@ -290,7 +301,7 @@ index bcdac3f0..c59be97c 100644
  	return ksu_queue_work(&ksu_save_work);
  }
 diff --git a/kernel/core_hook.c b/kernel/core_hook.c
-index 2ffc72aa..1934648f 100644
+index 2ffc72aa..ceeacbfb 100644
 --- a/kernel/core_hook.c
 +++ b/kernel/core_hook.c
 @@ -35,6 +35,10 @@
@@ -432,7 +443,7 @@ index 2ffc72aa..1934648f 100644
  			}
  			break;
  		}
-@@ -517,6 +615,374 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -517,6 +615,392 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  	}
  #endif
  
@@ -790,6 +801,24 @@ index 2ffc72aa..1934648f 100644
 +			return 0;
 +		}
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
++#ifdef CONFIG_KSU_SUSFS_SUS_MAP
++		if (arg2 == CMD_SUSFS_ADD_SUS_MAP) {
++			int error = 0;
++			if (!ksu_access_ok((void __user*)arg3, sizeof(struct st_susfs_sus_map))) {
++					pr_err("susfs: CMD_SUSFS_ADD_SUS_MAP -> arg3 is not accessible\n");
++					return 0;
++			}
++			if (!ksu_access_ok((void __user*)arg5, sizeof(error))) {
++					pr_err("susfs: CMD_SUSFS_ADD_SUS_MAP -> arg5 is not accessible\n");
++					return 0;
++			}
++			error = susfs_add_sus_map((struct st_susfs_sus_map __user*)arg3);
++			pr_info("susfs: CMD_SUSFS_ADD_SUS_MAP -> ret: %d\n", error);
++			if (copy_to_user((void __user*)arg5, &error, sizeof(error)))
++					pr_info("susfs: copy_to_user() failed\n");
++			return 0;
++		}
++#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 +		if (arg2 == CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING) {
 +			int error = 0;
 +			if (arg3 != 0 && arg3 != 1) {
@@ -807,7 +836,7 @@ index 2ffc72aa..1934648f 100644
  	// all other cmds are for 'root manager'
  	if (!from_manager) {
  		return 0;
-@@ -582,6 +1048,12 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -582,6 +1066,12 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  		}
  
  		if (enabled) {
@@ -820,7 +849,7 @@ index 2ffc72aa..1934648f 100644
  			ksu_sucompat_init();
  		} else {
  			ksu_sucompat_exit();
-@@ -622,11 +1094,15 @@ static bool should_umount(struct path *path)
+@@ -622,11 +1112,15 @@ static bool should_umount(struct path *path)
  		return false;
  	}
  
@@ -836,7 +865,7 @@ index 2ffc72aa..1934648f 100644
  }
  
  static int ksu_umount_mnt(struct path *path, int flags)
-@@ -639,7 +1115,11 @@ static int ksu_umount_mnt(struct path *path, int flags)
+@@ -639,7 +1133,11 @@ static int ksu_umount_mnt(struct path *path, int flags)
  #endif
  }
  
@@ -848,7 +877,7 @@ index 2ffc72aa..1934648f 100644
  {
  	struct path path;
  	int err = kern_path(mnt, 0, &path);
-@@ -659,12 +1139,135 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
+@@ -659,12 +1157,135 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
  		return;
  	}
  
@@ -984,7 +1013,7 @@ index 2ffc72aa..1934648f 100644
  int ksu_handle_setuid(struct cred *new, const struct cred *old)
  {
  	// this hook is used for umounting overlayfs for some uid, if there isn't any module mounted, just ignore it!
-@@ -739,6 +1342,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -739,6 +1360,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  
  	return 0;
  }
