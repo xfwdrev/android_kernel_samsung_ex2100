@@ -158,3 +158,14 @@ config USE_USB_COMMUNICATIONS_CAPABLE
 	 it can be used for various processing using event.
 	 You can check if the device that supports PD is the actual usb port.
 	 If this function is implemented, this feature will be default y
+
+config USB_SL_ONEUI8
+	bool "Use OneUI 8 USB logic for host restriction"
+	default n
+	help
+	  Samsung introduced a new USB restriction logic in OneUI 8 that
+	  uses string identifiers (for example: "SUNNY_WORK_MODE") instead
+	  of integers. Older OneUI 7 code used integer values to control
+	  USB host modes, which makes it incompatible with the OneUI 8
+	  implementation.
+
