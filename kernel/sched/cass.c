@@ -46,6 +46,9 @@ void cass_cpu_util(struct cass_cpu_cand *c, int this_cpu, bool sync)
 	c->util = READ_ONCE(cfs_rq->avg.util_avg);
 	if (sched_feat(UTIL_EST)) {
 		est = READ_ONCE(cfs_rq->avg.util_est.enqueued);
+#ifdef CONFIG_SCHED_EMS
+		est = est * sysctl_sched_util_est_clamp / 100;
+#endif
 		if (est > c->util) {
 			/* Don't deduct @current's util from estimated util */
 			sync = false;
@@ -70,6 +73,9 @@ void cass_cpu_util(struct cass_cpu_cand *c, int this_cpu, bool sync)
 	 * CFS and RT tasks when CASS selects a CPU for them.
 	 */
 	c->cap = c->cap_max - min(c->hard_util, c->cap_max - 1);
+#ifdef CONFIG_SCHED_EMS
+	c->util = min_t(unsigned long, c->util, c->cap_max);
+#endif
 }
 
 /* Returns true if @a is a better CPU than @b */
@@ -138,6 +144,9 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 	struct cass_cpu_cand cands[2], *best = cands;
 	int this_cpu = raw_smp_processor_id();
 	unsigned long p_util, uc_min;
+#ifdef CONFIG_SCHED_EMS
+	struct cpumask allowed;
+#endif
 	bool has_idle = false;
 	int cidx = 0, cpu;
 
@@ -148,6 +157,16 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 	p_util = rt ? 0 : task_util_est(p);
 	uc_min = uclamp_eff_value(p, UCLAMP_MIN);
 
+#ifdef CONFIG_SCHED_EMS
+	cpumask_and(&allowed, p->cpus_ptr, cpu_active_mask);
+	cpumask_and(&allowed, &allowed, ecs_cpus_allowed(p));
+	cpumask_and(&allowed, &allowed, emstune_cpus_allowed(p));
+
+	if (unlikely(cpumask_empty(&allowed)))
+		cpumask_and(&allowed, p->cpus_ptr, cpu_active_mask);
+
+	for_each_cpu(cpu, &allowed) {
+#else
 	/*
 	 * Find the best CPU to wake @p on. Although idle_get_state() requires
 	 * an RCU read lock, an RCU read lock isn't needed because we're not
@@ -160,6 +179,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 	 * @curr->cpu is set, then @best->cpu will be garbage.
 	 */
 	for_each_cpu_and(cpu, p->cpus_ptr, cpu_active_mask) {
+#endif
 		/* Use the free candidate slot for @curr */
 		struct cass_cpu_cand *curr = &cands[cidx];
 		struct cpuidle_state *idle_state;
@@ -288,7 +308,7 @@ static int cass_select_task_rq(struct task_struct *p, int prev_cpu, int sd_flag,
 	return cass_best_cpu(p, prev_cpu, sync, rt);
 }
 
-static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
+int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 				    int sd_flag, int wake_flags)
 {
 	return cass_select_task_rq(p, prev_cpu, sd_flag, wake_flags, false);

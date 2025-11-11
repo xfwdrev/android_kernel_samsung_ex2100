@@ -60,6 +60,9 @@ static int get_pe_list_size(void)
 	return num_of_list;
 }
 
+static int tiny_threshold = 16;
+
+#ifndef CONFIG_SCHED_CASS
 static void select_fit_cpus(struct tp_env *env)
 {
 	struct cpumask fit_cpus;
@@ -233,8 +236,6 @@ static void filter_rt_cpu(struct tp_env *env)
 		cpumask_copy(&env->fit_cpus, &mask);
 }
 
-static int tiny_threshold = 16;
-
 static void get_ready_env(struct tp_env *env)
 {
 	int cpu;
@@ -284,6 +285,7 @@ static void get_ready_env(struct tp_env *env)
 		*(unsigned int *)cpumask_bits(&env->candidates),
 		*(unsigned int *)cpumask_bits(&env->idle_candidates));
 }
+#endif /* !CONFIG_SCHED_CASS */
 
 static int
 exynos_select_task_rq_dl(struct task_struct *p, int prev_cpu,
@@ -293,6 +295,7 @@ exynos_select_task_rq_dl(struct task_struct *p, int prev_cpu,
 	return -1;
 }
 
+#ifndef CONFIG_SCHED_CASS
 static int
 exynos_select_task_rq_rt(struct task_struct *p, int prev_cpu,
 			 int sd_flag, int wake_flag)
@@ -411,6 +414,7 @@ exynos_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 
 	return target_cpu;
 }
+#endif /* !CONFIG_SCHED_CASS */
 
 int ems_can_migrate_task(struct task_struct *p, int dst_cpu)
 {
@@ -867,11 +871,107 @@ out:
 	trace_lb_newidle_balance(dst_cpu, src_cpu, *pulled_task, short_idle);
 }
 
+#ifdef CONFIG_SCHED_CASS
+static void cass_prep_env_sysbusy(struct tp_env *env)
+{
+	int cpu;
+
+	env->task_util = ml_task_util_est(env->p) ?: 1;
+	for_each_cpu(cpu, cpu_active_mask) {
+		unsigned int rt_util = cpu_util_rt(cpu_rq(cpu));
+
+		env->cpu_rt_util[cpu] = rt_util;
+		env->cpu_util_wo[cpu] = ml_cpu_util_without(cpu, env->p);
+		env->cpu_util[cpu]    = ml_cpu_util(cpu) + rt_util;
+	}
+
+	cpumask_and(&env->cpus_allowed, env->p->cpus_ptr, cpu_active_mask);
+	cpumask_and(&env->cpus_allowed, &env->cpus_allowed, emstune_cpus_allowed(env->p));
+	cpumask_and(&env->cpus_allowed, &env->cpus_allowed, ecs_cpus_allowed(env->p));
+}
+
+static void cass_prep_env_prio_pinning(struct tp_env *env)
+{
+	cpumask_and(&env->cpus_allowed, env->p->cpus_ptr, cpu_active_mask);
+	cpumask_and(&env->cpus_allowed, &env->cpus_allowed, emstune_cpus_allowed(env->p));
+	cpumask_and(&env->cpus_allowed, &env->cpus_allowed, ecs_cpus_allowed(env->p));
+}
+#endif /* CONFIG_SCHED_CASS */
+
 int exynos_select_task_rq(struct task_struct *p, int prev_cpu,
 			  int sd_flag, int wake_flag)
 {
 	int cpu = -1;
+#ifdef CONFIG_SCHED_CASS
+	int wake = !p->on_rq;
 
+	if (p->sched_class == &dl_sched_class) {
+		cpu = exynos_select_task_rq_dl(p, prev_cpu, sd_flag, wake_flag);
+		if (cpu >= 0 && !is_dst_allowed(p, cpu))
+			cpu = -1;
+		return cpu;
+	}
+
+	if (p->sched_class == &rt_sched_class) {
+#ifdef CONFIG_SCHED_USE_FLUID_RT
+		cpu = frt_find_lowest_rq(p);
+		if (cpu >= 0) {
+			trace_ems_select_task_rq(p, cpu, wake, "frt");
+			return cpu;
+		}
+#endif
+		return -1;
+	}
+
+	if (p->sched_class == &fair_sched_class) {
+		if (is_sysbusy()) {
+			struct tp_env env = {
+				.p = p,
+				.sched_policy = emstune_sched_policy(p),
+				.wake = wake,
+			};
+			cass_prep_env_sysbusy(&env);
+			cpu = sysbusy_schedule(&env);
+			if (cpu >= 0) {
+				trace_ems_select_task_rq(p, cpu, wake, "sysbusy");
+				return cpu;
+			}
+		}
+
+		if (need_prio_pinning(p)) {
+			struct tp_env env = {
+				.p = p,
+				.wake = wake,
+			};
+			cass_prep_env_prio_pinning(&env);
+			cpu = prio_pinning_schedule(&env, prev_cpu);
+			if (cpu >= 0) {
+				trace_ems_select_task_rq(p, cpu, wake, "prio pinning");
+				return cpu;
+			}
+		}
+
+		if ((wake_flag & WF_SYNC_CL) &&
+		    !(current->flags & PF_EXITING)) {
+			struct cpumask cl_sync_mask;
+			int cl_sync_cpu = smp_processor_id();
+
+			cpumask_and(&cl_sync_mask, p->cpus_ptr,
+					cpu_coregroup_mask(cl_sync_cpu));
+			cpumask_and(&cl_sync_mask, &cl_sync_mask,
+					emstune_cpus_allowed(p));
+			if (!cpumask_empty(&cl_sync_mask)) {
+				cpu = cpumask_any(&cl_sync_mask);
+				trace_ems_select_task_rq(p, cpu, wake, "cl sync");
+				return cpu;
+			}
+		}
+		/* let CASS handle placement */
+		return -1;
+	}
+	return -1;
+
+#else /* !CONFIG_SCHED_CASS */
 	if (p->sched_class == &dl_sched_class)
 		cpu = exynos_select_task_rq_dl(p, prev_cpu, sd_flag, wake_flag);
 	else if (p->sched_class == &rt_sched_class)
@@ -883,6 +983,7 @@ int exynos_select_task_rq(struct task_struct *p, int prev_cpu,
 		cpu = -1;
 
 	return cpu;
+#endif /* CONFIG_SCHED_CASS */
 }
 
 void ems_tick(struct rq *rq)

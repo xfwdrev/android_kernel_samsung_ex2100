@@ -367,6 +367,10 @@ void ontime_migration(void)
 
 	/* Select destination cpu which the heavy task will be moved */
 	dst_cpu = exynos_select_task_rq(p, rq->cpu, 0, 0);
+#ifdef CONFIG_SCHED_CASS
+	if (dst_cpu < 0 && p->sched_class == &fair_sched_class)
+		dst_cpu = cass_select_task_rq_fair(p, rq->cpu, 0, 0);
+#endif
 	if (dst_cpu < 0 || rq->cpu == dst_cpu) {
 		raw_spin_unlock_irqrestore(&rq->lock, flags);
 		return;
