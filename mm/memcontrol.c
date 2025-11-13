@@ -1391,7 +1391,6 @@ EXPORT_SYMBOL_GPL(do_traversal_all_lruvec);
  * mem_cgroup_update_lru_size - account for adding or removing an lru page
  * @lruvec: mem_cgroup per zone lru vector
  * @lru: index of lru list the page is sitting on
- * @zid: zone id of the accounted pages
  * @nr_pages: positive when adding or negative when removing
  *
  * This function must be called under lru_lock, just before a page is added
@@ -1399,31 +1398,25 @@ EXPORT_SYMBOL_GPL(do_traversal_all_lruvec);
  * so as to allow it to check that lru_size 0 is consistent with list_empty).
  */
 void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
-				int zid, int nr_pages)
+				int nr_pages)
 {
 	struct mem_cgroup_per_node *mz;
 	unsigned long *lru_size;
-	long size;
+	long size, new_size;
 
 	if (mem_cgroup_disabled())
 		return;
 
 	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
-	lru_size = &mz->lru_zone_size[zid][lru];
-
-	if (nr_pages < 0)
-		*lru_size += nr_pages;
+	lru_size = &mz->lru_size[lru];
 
 	size = *lru_size;
-	if (WARN_ONCE(size < 0,
-		"%s(%p, %d, %d): lru_size %ld\n",
-		__func__, lruvec, lru, nr_pages, size)) {
-		VM_BUG_ON(1);
+	new_size = size + nr_pages;
+	if (new_size < 0) {
 		*lru_size = 0;
+	} else {
+		*lru_size = new_size;
 	}
-
-	if (nr_pages > 0)
-		*lru_size += nr_pages;
 }
 
 /**
@@ -3958,21 +3951,17 @@ static int mem_cgroup_move_charge_write(struct cgroup_subsys_state *css,
 #define LRU_ALL_ANON (BIT(LRU_INACTIVE_ANON) | BIT(LRU_ACTIVE_ANON))
 #define LRU_ALL	     ((1 << NR_LRU_LISTS) - 1)
 
-static unsigned long mem_cgroup_node_nr_lru_pages(struct mem_cgroup *memcg,
+unsigned long mem_cgroup_node_nr_lru_pages(struct mem_cgroup *memcg,
 					   int nid, unsigned int lru_mask)
 {
-	struct lruvec *lruvec = mem_cgroup_lruvec(NODE_DATA(nid), memcg);
-	unsigned long nr = 0;
-	enum lru_list lru;
+	struct mem_cgroup_per_node *mz = mem_cgroup_nodeinfo(memcg, nid);
+	unsigned long total = 0;
+	int lru;
 
-	VM_BUG_ON((unsigned)nid >= nr_node_ids);
-
-	for_each_lru(lru) {
-		if (!(BIT(lru) & lru_mask))
-			continue;
-		nr += lruvec_page_state_local(lruvec, NR_LRU_BASE + lru);
+	for_each_set_bit(lru, &lru_mask, NR_LRU_LISTS) {
+		total += mz->lru_size[lru];
 	}
-	return nr;
+	return total;
 }
 
 static unsigned long mem_cgroup_nr_lru_pages(struct mem_cgroup *memcg,
