@@ -70,7 +70,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 
 	show_val_kb(m, "MemTotal:       ", i.totalram);
 	show_val_kb(m, "MemFree:        ", i.freeram + rbinfree + hugepage_pool_pages);
-	show_val_kb(m, "MemAvailable:   ", available + rbinfree);
+	show_val_kb(m, "MemAvailable:   ", available + rbinfree + hugepage_pool_pages);
 	show_val_kb(m, "Buffers:        ", i.bufferram);
 	show_val_kb(m, "Cached:         ", cached);
 	show_val_kb(m, "SwapCached:     ", total_swapcache_pages());

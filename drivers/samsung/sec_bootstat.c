@@ -73,6 +73,7 @@ static struct boot_event boot_events[] = {
 	{"!@Boot_SVC : RIL_UNSOL_RIL_CONNECTED",},
 	{"!@Boot_SVC : setRadioPower on",},
 	{"!@Boot_SVC : setUiccSubscription",},
+	{"!@Boot_SVC : SIM fetchSimRecords",},
 	{"!@Boot_SVC : SIM onAllRecordsLoaded",},
 	{"!@Boot_SVC : RUIM onAllRecordsLoaded",},
 	{"!@Boot_SVC : setupDataCall",},

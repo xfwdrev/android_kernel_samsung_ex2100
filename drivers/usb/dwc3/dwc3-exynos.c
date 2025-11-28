@@ -160,7 +160,7 @@ static int dwc3_exynos_clk_get(struct dwc3_exynos *exynos)
 	clk_ids[clk_count] = NULL;
 
 	exynos->clocks = (struct clk **) devm_kmalloc(exynos->dev,
-			clk_count * sizeof(struct clk *), GFP_KERNEL);
+			(clk_count + 1) * sizeof(struct clk *), GFP_KERNEL);
 	if (!exynos->clocks) {
 		dev_err(exynos->dev, "%s: couldn't alloc\n", __func__);
 		return -ENOMEM;

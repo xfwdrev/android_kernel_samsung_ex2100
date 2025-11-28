@@ -7302,18 +7302,25 @@ static inline struct task_group *css_tg(struct cgroup_subsys_state *css)
 }
 
 #define EMS_SUPPORT_GROUP_COUNT		4
+extern char *stune_group_name[];
 int cpuctl_task_group_idx(struct task_struct *p)
 {
-	int idx;
+	int idx = 0;
 	struct cgroup_subsys_state *css;
+	int i;
+	const char *name;
 
 	rcu_read_lock();
 	css = task_css(p, cpu_cgrp_id);
-	idx = css->id - 1;
+	name = css->cgroup->kn->name;
 	rcu_read_unlock();
 
-	if (idx >= EMS_SUPPORT_GROUP_COUNT)
-		idx = 0;
+	for (i = 0; i < EMS_SUPPORT_GROUP_COUNT; i++) {
+		if (name && !strcmp(name, stune_group_name[i])) {
+			idx = i;
+			break;
+		}
+	}
 
 	return idx;
 }

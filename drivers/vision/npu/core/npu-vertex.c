@@ -326,8 +326,7 @@ static int npu_vertex_flush(struct file *file)
 	struct npu_vertex_ctx *vctx = file->private_data;
 	struct npu_session *session = container_of(
 			vctx, struct npu_session, vctx);
-	struct npu_vertex *vertex = vctx->vertex;
-	struct mutex *lock = &vertex->lock;
+	struct mutex *lock = &vctx->lock;
 
 	if (fatal_signal_pending(current) || (current->exit_code != 0)) {
 		mutex_lock(lock);

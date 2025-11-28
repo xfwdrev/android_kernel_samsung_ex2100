@@ -255,6 +255,7 @@ static int __mfc_force_close_inst(struct mfc_core *core, struct mfc_ctx *ctx)
 {
 	struct mfc_core_ctx *core_ctx = core->core_ctx[ctx->num];
 	enum mfc_inst_state prev_state;
+	struct mfc_dec *dec = ctx->dec_priv;
 
 	if (core_ctx->state == MFCINST_FREE)
 		return 0;
@@ -280,6 +281,12 @@ static int __mfc_force_close_inst(struct mfc_core *core, struct mfc_ctx *ctx)
 
 	/* Free resources */
 	mfc_release_instance_context(core_ctx);
+
+	if (dec->hdr10_plus_info)
+		vfree(dec->hdr10_plus_info);
+
+	if (dec->av1_film_grain_info)
+		vfree(dec->av1_film_grain_info);
 
 	return 0;
 }

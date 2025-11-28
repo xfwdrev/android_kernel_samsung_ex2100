@@ -15,15 +15,26 @@
  */
 
 #include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/pm_qos.h>
 #include <linux/sec_pm_cpufreq.h>
+#include <linux/sec_class.h>
 #include <soc/samsung/freq-qos-tracer.h>
+#include <soc/samsung/exynos_pm_qos.h>
 
 static DEFINE_MUTEX(cpufreq_list_lock);
 static LIST_HEAD(sec_pm_cpufreq_list);
 
 static unsigned long throttle_count;
+
+struct device *sec_pm_dev;
+static struct exynos_pm_qos_request sec_pm_gpu_max_qos;
+
+static unsigned long gpu_freq_table[] = {
+	858000, 767000, 676000, 585000, 494000, 403000, 312000, 221000, 130000
+};
 
 static int sec_pm_cpufreq_set_max_freq(struct sec_pm_cpufreq_dev *cpufreq_dev,
 				 unsigned int level)
@@ -57,6 +68,39 @@ static unsigned long get_level(struct sec_pm_cpufreq_dev *cpufreq_dev,
 	return level;
 }
 
+static void sec_pm_throttle_gpu_freq(unsigned long count)
+{
+	unsigned long freq;
+	unsigned int arr_size = ARRAY_SIZE(gpu_freq_table);
+	unsigned int idx = arr_size / 2;
+
+	idx += count;
+
+	if (idx >= arr_size)
+		return;
+
+	freq = gpu_freq_table[idx];
+
+	pr_info("%s: %lu\n", __func__, freq);
+
+	if (sec_pm_gpu_max_qos.exynos_pm_qos_class) {
+		if (exynos_pm_qos_request_active(&sec_pm_gpu_max_qos))
+			exynos_pm_qos_update_request(&sec_pm_gpu_max_qos, freq);
+	}
+}
+
+static void sec_pm_unthrottle_gpu_freq(void)
+{
+	unsigned long freq = PM_QOS_GPU_FREQ_MAX_DEFAULT_VALUE;
+
+	pr_info("%s\n", __func__);
+
+	if (sec_pm_gpu_max_qos.exynos_pm_qos_class) {
+		if (exynos_pm_qos_request_active(&sec_pm_gpu_max_qos))
+			exynos_pm_qos_update_request(&sec_pm_gpu_max_qos, freq);
+	}
+}
+
 /* For SMPL_WARN interrupt */
 int sec_pm_cpufreq_throttle_by_one_step(void)
 {
@@ -66,6 +110,7 @@ int sec_pm_cpufreq_throttle_by_one_step(void)
 
 	++throttle_count;
 
+	/* Throttle CPU freuency */
 	list_for_each_entry(cpufreq_dev, &sec_pm_cpufreq_list, node) {
 		if (!cpufreq_dev->policy || !cpufreq_dev->freq_table) {
 			pr_warn("%s: No cpufreq_dev\n", __func__);
@@ -86,6 +131,9 @@ int sec_pm_cpufreq_throttle_by_one_step(void)
 		sec_pm_cpufreq_set_max_freq(cpufreq_dev, level);
 	}
 
+	/* Throttle GPU freuency */
+	sec_pm_throttle_gpu_freq(throttle_count);
+
 	return throttle_count;
 }
 EXPORT_SYMBOL_GPL(sec_pm_cpufreq_throttle_by_one_step);
@@ -103,6 +151,8 @@ void sec_pm_cpufreq_unthrottle(void)
 
 	list_for_each_entry(cpufreq_dev, &sec_pm_cpufreq_list, node)
 		sec_pm_cpufreq_set_max_freq(cpufreq_dev, 0);
+
+	sec_pm_unthrottle_gpu_freq();
 }
 EXPORT_SYMBOL_GPL(sec_pm_cpufreq_unthrottle);
 
@@ -118,6 +168,76 @@ static unsigned int find_next_max(struct cpufreq_frequency_table *table,
 	}
 
 	return max;
+}
+
+static ssize_t gpu_freq_max_pm_qos_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	size_t count = 0;
+	int val;
+
+	val = exynos_pm_qos_read_req_value(sec_pm_gpu_max_qos.exynos_pm_qos_class,
+			&sec_pm_gpu_max_qos);
+
+	if (val < 0) {
+		pr_err("%s: failed to read requested value\n", __func__);
+		return count;
+	}
+	count += snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+	return count;
+}
+
+static ssize_t gpu_freq_max_pm_qos_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	u32 qos_value;
+
+	if (kstrtou32(buf, 0, &qos_value))
+		return -EINVAL;
+
+	if (sec_pm_gpu_max_qos.exynos_pm_qos_class) {
+		if (exynos_pm_qos_request_active(&sec_pm_gpu_max_qos))
+			exynos_pm_qos_update_request(&sec_pm_gpu_max_qos, qos_value);
+	}
+
+	return count;
+}
+static DEVICE_ATTR_RW(gpu_freq_max_pm_qos);
+
+static struct attribute *sec_pm_cpufreq_attrs[] = {
+	&dev_attr_gpu_freq_max_pm_qos.attr,
+	NULL
+};
+
+static const struct attribute_group sec_pm_cpufreq_group = {
+	.attrs = sec_pm_cpufreq_attrs,
+};
+
+static void sec_pm_init_sysfs(void)
+{
+	static int init_done;
+
+	if (init_done)
+		return;
+
+	pr_info("%s\n", __func__);
+	sec_pm_dev = sec_device_create(NULL, "sec_pm_cpufreq");
+	sysfs_create_group(&sec_pm_dev->kobj, &sec_pm_cpufreq_group);
+	init_done = 1;
+}
+
+static void sec_pm_init_gpu_pm_qos(void)
+{
+	static int init_done;
+
+	if (init_done)
+		return;
+
+	pr_info("%s\n", __func__);
+	exynos_pm_qos_add_request(&sec_pm_gpu_max_qos, PM_QOS_GPU_THROUGHPUT_MAX,
+			PM_QOS_GPU_FREQ_MAX_DEFAULT_VALUE);
+	init_done = 1;
 }
 
 static struct sec_pm_cpufreq_dev *
@@ -182,6 +302,9 @@ __sec_pm_cpufreq_register(struct cpufreq_policy *policy)
 	list_add(&cpufreq_dev->node, &sec_pm_cpufreq_list);
 	mutex_unlock(&cpufreq_list_lock);
 
+	sec_pm_init_gpu_pm_qos();
+	sec_pm_init_sysfs();
+
 	return cpufreq_dev;
 
 free_table:
@@ -213,6 +336,7 @@ void sec_pm_cpufreq_unregister(struct sec_pm_cpufreq_dev *cpufreq_dev)
 	mutex_unlock(&cpufreq_list_lock);
 
 	freq_qos_tracer_remove_request(&cpufreq_dev->qos_req);
+	exynos_pm_qos_remove_request(&sec_pm_gpu_max_qos);
 
 	kfree(cpufreq_dev->freq_table);
 	kfree(cpufreq_dev);

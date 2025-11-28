@@ -21,7 +21,7 @@
 
 #include <dt-bindings/soc/samsung/ems.h>
 
-static char *stune_group_name[] = {
+char *stune_group_name[] = {
 	"root",
 	"foreground",
 	"background",
