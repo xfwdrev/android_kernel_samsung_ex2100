@@ -966,16 +966,13 @@ static ssize_t usb_sl_show(struct device *dev,
 {
 	struct usb_notify_dev *udev = (struct usb_notify_dev *)
 		dev_get_drvdata(dev);
-#ifdef CONFIG_USB_SL_ONEUI8
-		const char *state;
-#endif
+	const char *state;
 
 	if (udev == NULL) {
 		pr_err("udev is NULL\n");
 		return -EINVAL;
 	}
 
-#ifdef CONFIG_USB_SL_ONEUI8
 	state = LOCK_STATE_NAMES[udev->secure_lock % TOTAL_STATES];
 
 #ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
@@ -987,14 +984,6 @@ static ssize_t usb_sl_show(struct device *dev,
 #endif
 
     return snprintf(buf, PAGE_SIZE, "%s\n", state);
-
-#else
-	pr_info("%s secure_lock = %lu\n",
-		__func__, udev->secure_lock);
-
-	return sprintf(buf, "%lu\n", udev->secure_lock);
-#endif
-
 }
 
 static ssize_t usb_sl_store(
@@ -1010,10 +999,8 @@ static ssize_t usb_sl_store(
 #endif
 	int sret = -EINVAL;
 	size_t ret = -ENOMEM;
-#ifdef CONFIG_USB_SL_ONEUI8
 	char input_str[25];
 	int i;
-#endif
 
 	if (udev == NULL) {
 		pr_err("udev is NULL\n");
@@ -1032,7 +1019,6 @@ static ssize_t usb_sl_store(
 		__func__, udev->secure_lock);
 #endif
 
-#ifdef CONFIG_USB_SL_ONEUI8
 	sret = sscanf(buf, "%24s", input_str);
 	if (sret != 1) {
 		pr_err("%s invalid input (%s)-\n", __func__, input_str);
@@ -1050,11 +1036,6 @@ static ssize_t usb_sl_store(
 		pr_err("%s disallow input (%s)-\n", __func__, input_str);
 		goto error;
 	}
-#else
-	sret = sscanf(buf, "%lu", &secure_lock);
-	if (sret != 1)
-		goto error;
-#endif
 
 #ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
 	prev_secure_lock = udev->secure_lock;
@@ -1069,9 +1050,7 @@ static ssize_t usb_sl_store(
 			udev->set_disable(udev, NOTIFY_BLOCK_TYPE_ALL);
 			udev->first_restrict = true;
 		}
-	}
-#ifdef CONFIG_USB_SL_ONEUI8
-	 else if (udev->first_restrict
+	} else if (udev->first_restrict
 					&& (secure_lock == USB_NOTIFY_UNLOCK
 							|| secure_lock == USB_NOTIFY_LOCK_USB_WORK)) {
 		if (udev->set_disable) {
@@ -1079,16 +1058,6 @@ static ssize_t usb_sl_store(
 			udev->first_restrict = false;
 		}
 	}
-#else		
-	 else if (udev->first_restrict && prev_secure_lock == USB_NOTIFY_LOCK_USB_RESTRICT
-				&& (secure_lock == USB_NOTIFY_UNLOCK
-						|| secure_lock == USB_NOTIFY_LOCK_USB_WORK)) {
-		if (udev->set_disable) {
-			udev->set_disable(udev, NOTIFY_BLOCK_TYPE_NONE);
-			udev->first_restrict = false;
-		}
-	}
-#endif
 
 	pr_info("%s after secure_lock = %s -\n",
 		__func__, lock_string(udev->secure_lock));
