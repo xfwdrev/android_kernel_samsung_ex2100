@@ -1,7 +1,6 @@
 #!/bin/bash
 
 PATCH_FILE="$PWD/patches/patch-susfs.patch"
-PATCH_FILE_MIN="$PWD/patches/patch_ksu_for_minimal_hooks.patch"
 PATCH_DIR="$PWD/KernelSU-Next"
 
 abort()
@@ -202,8 +201,8 @@ build_boot() {
     RAMDISK_00=build/out/$MODEL/boot_ramdisk
     KERNEL=build/out/$MODEL/Image
     HEADER_VERSION=3
-    OS_VERSION=15.0.0
-    OS_PATCH_LEVEL=2025-08
+    OS_VERSION=16.0.0
+    OS_PATCH_LEVEL=2025-11
     CMDLINE="androidboot.selinux=permissive loop.max_part=7"
 
 	python3 toolchain/mkbootimg/mkbootimg.py --header_version $HEADER_VERSION --cmdline "$CMDLINE" --ramdisk $RAMDISK_00 \
@@ -392,11 +391,11 @@ build_zip() {
     DATE=`date +"%d-%m-%Y_%H-%M-%S"`
 
     if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
-        NAME="${version}_${MODEL}_UNOFFICIAL_KSU_SUSFS_${DATE}.zip"
+        NAME="${version}_${MODEL}_KSU_SUSFS_OFFICIAL_${DATE}.zip"
     elif [[ "$KSU_OPTION" == "y" ]]; then
-        NAME="${version}_${MODEL}_UNOFFICIAL_KSU_${DATE}.zip"
+        NAME="${version}_${MODEL}_KSU_OFFICIAL_${DATE}.zip"
     else
-        NAME="${version}_${MODEL}_UNOFFICIAL_${DATE}.zip"
+        NAME="${version}_${MODEL}_VANILLA_OFFICIAL_${DATE}.zip"
     fi
     zip -r -qq ../"$NAME" .
     popd > /dev/null
@@ -421,6 +420,7 @@ if [[ "$KSU_OPTION" == "y" ]]; then
 
 else
     refetch_ksu
+    
     sed -i "\|$KSU|d" "$KCONFIG_FILE"
     sed -i "\|$MAKEFILE_LINE|d" "$MAKEFILE"
 fi
