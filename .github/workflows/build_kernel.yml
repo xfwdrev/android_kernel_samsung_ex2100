@@ -3,6 +3,9 @@ name: Kernel Build
 on:
   workflow_dispatch:
     inputs:
+      tag_name:
+        description: "Tag name (example: v1.0)"
+        required: true
       release_name:
         description: "Release name"
         required: true
@@ -71,7 +74,8 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        files: artifacts/**/*.zip
+        tag_name: ${{ github.event.inputs.tag_name }}
         name: ${{ github.event.inputs.release_name || github.ref_name }}
+        files: artifacts/**/*.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
