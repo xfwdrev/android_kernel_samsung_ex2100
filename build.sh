@@ -402,8 +402,27 @@ build_zip() {
     popd > /dev/null
 }
 
+KCONFIG_FILE="drivers/Kconfig"
+KSU='source "drivers/kernelsu/Kconfig"'
+MAKEFILE="drivers/Makefile"
+MAKEFILE_LINE='obj-$(CONFIG_KSU) += kernelsu/'
+
 if [[ "$KSU_OPTION" == "y" ]]; then
-refetch_ksu
+
+    if ! grep -Fxq "$KSU" "$KCONFIG_FILE"; then
+        sed -i "\|endmenu|i $KSU" "$KCONFIG_FILE"
+    fi
+
+    if ! grep -Fxq "$MAKEFILE_LINE" "$MAKEFILE"; then
+        echo "$MAKEFILE_LINE" >> "$MAKEFILE"
+    fi
+
+    refetch_ksu
+
+else
+    refetch_ksu
+    sed -i "\|$KSU|d" "$KCONFIG_FILE"
+    sed -i "\|$MAKEFILE_LINE|d" "$MAKEFILE"
 fi
 
 if [[ "$SUSFS_OPTION" == "y" ]]; then
