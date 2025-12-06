@@ -353,7 +353,7 @@ build_vendor_boot() {
     # Pack RAMDisks
     # vendor_ramdisk == ramdisk00
     pushd build/out/$MODEL/vendor_ramdisk00 > /dev/null
-    find . ! -name . | LC_ALL=C sort | cpio -o -H newc -R root:root | gzip > ../$MODEl/vendor_ramdisk || abort
+    find . ! -name . | LC_ALL=C sort | cpio -o -H newc -R root:root | gzip -c > ../$MODEl/vendor_ramdisk || abort
     popd > /dev/null
 
     echo "-----------------------------------------------"
