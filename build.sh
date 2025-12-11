@@ -53,18 +53,9 @@ refetch_ksu() {
 
     rm -rf "$PATCH_DIR"
 
-        echo "Fetching latest KernelSU Next"
+        echo "Fetching latest RKSU"
         git submodule update --init --recursive || {
-            echo "Failed to initialize KernelSU-Next submodule!"
-            exit 1
-        }
-}
-
-apply_ksu_susfs_patch() {
-
-        echo "Applying SuSFS patch to KernelSU Next..."
-        patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
-            echo "Failed to apply SuSFS patch!"
+            echo "Failed to initialize RKSU submodule!"
             exit 1
         }
 }
@@ -423,10 +414,6 @@ else
     
     sed -i "\|$KSU|d" "$KCONFIG_FILE"
     sed -i "\|$MAKEFILE_LINE|d" "$MAKEFILE"
-fi
-
-if [[ "$SUSFS_OPTION" == "y" ]]; then
-apply_ksu_susfs_patch
 fi
 
 build_kernel
