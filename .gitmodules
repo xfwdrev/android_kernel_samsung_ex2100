@@ -1,6 +1,6 @@
 [submodule "toolchain/mkbootimg"]
 	path = toolchain/mkbootimg
 	url = https://android.googlesource.com/platform/system/tools/mkbootimg
-[submodule "KernelSU-Next"]
-	path = KernelSU-Next
-	url = https://github.com/rifsxd/KernelSU-Next.git
+[submodule "KernelSU"]
+	path = KernelSU
+	url = https://github.com/rsuntk/KernelSU.git
