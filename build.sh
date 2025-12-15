@@ -410,6 +410,15 @@ if [[ "$KSU_OPTION" == "y" ]]; then
     git -C KernelSU fetch origin
     git -C KernelSU checkout "$KSU_BRANCH"
     git -C KernelSU pull origin "$KSU_BRANCH"
+
+    if ! grep -Fxq "$KSU" "$KCONFIG_FILE"; then
+        sed -i "\|endmenu|i $KSU" "$KCONFIG_FILE"
+    fi
+
+    if ! grep -Fxq "$MAKEFILE_LINE" "$MAKEFILE"; then
+        echo "$MAKEFILE_LINE" >> "$MAKEFILE"
+    fi
+
 else
 
     fetch_ksu
