@@ -45,14 +45,6 @@ extern bool susfs_is_base_dentry_sdcard_dir(struct dentry* base);
 	unsafe_copy_to_user(dst, src, len, label);		\
 } while (0)
 
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-#include <linux/susfs_def.h>
-extern bool susfs_is_inode_sus_path(struct inode *inode);
-extern bool susfs_is_sus_android_data_d_name_found(const char *d_name);
-extern bool susfs_is_sus_sdcard_d_name_found(const char *d_name);
-extern bool susfs_is_base_dentry_android_data_dir(struct dentry* base);
-extern bool susfs_is_base_dentry_sdcard_dir(struct dentry* base);
-#endif
 int iterate_dir(struct file *file, struct dir_context *ctx)
 {
 	struct inode *inode = file_inode(file);

@@ -1680,7 +1680,7 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 			goto retry;
 		}
 	}
-	dentry = lookup_dcache(name, base, flags);
+		dentry = lookup_dcache(name, base, flags);
 retry:
 #endif
 

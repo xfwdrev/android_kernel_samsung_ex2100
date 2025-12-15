@@ -33,6 +33,10 @@
 #include <asm/tlbflush.h>
 #include "internal.h"
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
+#endif
+
 #ifdef CONFIG_ZRAM_LRU_WRITEBACK
 #include <linux/delay.h>
 #include "../../drivers/block/zram/zram_drv.h"
@@ -358,10 +362,6 @@ static void show_vma_header_prefix(struct seq_file *m,
 	seq_put_decimal_ull(m, " ", ino);
 	seq_putc(m, ' ');
 }
-
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
-#endif
 
 static void
 show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
