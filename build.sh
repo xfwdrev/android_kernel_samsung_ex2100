@@ -408,8 +408,7 @@ if [[ "$KSU_OPTION" == "y" ]]; then
     fi
 
     git -C KernelSU fetch origin
-    git -C KernelSU checkout "$KSU_BRANCH"
-    git -C KernelSU pull origin "$KSU_BRANCH"
+    git -C KernelSU checkout -B "$KSU_BRANCH" "origin/$KSU_BRANCH"
 
     if [[ "$SUSFS_OPTION" == "y" && $KSU_BRANCH == "susfs-rksu-master" ]]; then
 
