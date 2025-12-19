@@ -140,7 +140,8 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap, unsigned long
 	return dmabuf;
 
 free_export:
-	for_each_sgtable_sg(&buffer->sg_table, sg, i) {
+	struct sg_table *table = &buffer->sg_table;
+	for_each_sgtable_sg(table, sg, i) {
 		struct page *p = sg_page(sg);
 
 		__free_pages(p, compound_order(p));

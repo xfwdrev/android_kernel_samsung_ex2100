@@ -18,7 +18,7 @@
 #include <linux/sched/signal.h>
 #include <linux/types.h>
 #include <linux/sort.h>
-#include <trace/hooks/mm.h>
+//#include <trace/hooks/mm.h>
 
 #include "heap_private.h"
 
@@ -982,7 +982,7 @@ int __init dmabuf_trace_create(void)
 	INIT_LIST_HEAD(&head_task.node);
 	INIT_LIST_HEAD(&head_task.ref_list);
 
-	register_trace_android_vh_show_mem(show_dmabuf_trace_handler, NULL);
+	//register_trace_android_vh_show_mem(show_dmabuf_trace_handler, NULL);
 	dmabuf_trace_memlog_register();
 
 	pr_info("Initialized dma-buf trace successfully.\n");

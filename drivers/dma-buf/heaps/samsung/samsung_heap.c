@@ -248,7 +248,7 @@ static void show_dmaheap_total_handler(void *data, unsigned int filter, nodemask
 		pr_info("%s: %lukb ", heap->name, total_size_kb);
 }
 
-static void show_dmaheap_meminfo(void *data, struct seq_file *m)
+/*static void show_dmaheap_meminfo(void *data, struct seq_file *m)
 {
 	struct samsung_dma_heap *heap = data;
 	u64 total_size_kb = samsung_heap_total_kbsize(heap);
@@ -257,7 +257,7 @@ static void show_dmaheap_meminfo(void *data, struct seq_file *m)
 		return;
 
 	show_val_meminfo(m, heap->name, total_size_kb);
-}
+}*/
 
 static struct samsung_dma_heap *__samsung_heap_add(struct device *dev, void *priv,
 						   void (*release)(struct samsung_dma_buffer *),
@@ -323,9 +323,9 @@ static struct samsung_dma_heap *__samsung_heap_add(struct device *dev, void *pri
 	if (IS_ERR(heap->dma_heap))
 		return heap;
 
-	register_trace_android_vh_show_mem(show_dmaheap_total_handler, heap);
-	if (!strncmp(heap_name, "system", strlen("system")))
-		register_trace_android_vh_meminfo_proc_show(show_dmaheap_meminfo, heap);
+	//register_trace_android_vh_show_mem(show_dmaheap_total_handler, heap);
+	//if (!strncmp(heap_name, "system", strlen("system")))
+	//	register_trace_android_vh_meminfo_proc_show(show_dmaheap_meminfo, heap);
 	dma_coerce_mask_and_coherent(dma_heap_get_dev(heap->dma_heap), DMA_BIT_MASK(36));
 
 	pr_info("Registered %s dma-heap successfully\n", heap_name);

@@ -984,11 +984,11 @@ static int __init hpa_dma_heap_init(void)
 
 		hpa_heaps[i].dma_heap = dma_heap;
 		dma_coerce_mask_and_coherent(dma_heap_get_dev(dma_heap), DMA_BIT_MASK(36));
-		register_trace_android_vh_show_mem(show_hpa_heap_handler, &hpa_heaps[i]);
+		//register_trace_android_vh_show_mem(show_hpa_heap_handler, &hpa_heaps[i]);
 
 		pr_info("Registered %s dma-heap successfully\n", hpa_heaps[i].name);
 	}
-	register_trace_android_vh_show_mem(show_hpa_trace_handler, NULL);
+	//register_trace_android_vh_show_mem(show_hpa_trace_handler, NULL);
 
 	hpa_add_exception_area();
 	hpa_debug_init();

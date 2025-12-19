@@ -15,7 +15,8 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-direct.h>
 #include <linux/dma-heap.h>
-#include <linux/dma-map-ops.h>
+#include <linux/dma-mapping.h>
+#include <linux/dma-noncoherent.h>
 #include <linux/err.h>
 #include <linux/highmem.h>
 #include <linux/mm.h>

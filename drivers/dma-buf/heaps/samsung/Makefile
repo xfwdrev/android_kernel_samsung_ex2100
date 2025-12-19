@@ -2,7 +2,7 @@
 obj-$(CONFIG_DMABUF_HEAPS_SAMSUNG_HPA) += hpa_heap.o
 obj-$(CONFIG_DMABUF_CONTAINER)  += dma-buf-container.o
 obj-$(CONFIG_DMABUF_SAMSUNG_HEAPS) += samsung_dma_heap.o
-samsung_dma_heap-y += heap_dma_buf.o samsung_heap.o secure_buffer.o
+samsung_dma_heap-y += heap_dma_buf.o samsung_heap.o secure_buffer.o dma-buf-trace.o
 samsung_dma_heap-$(CONFIG_DMABUF_HEAPS_SAMSUNG_CHUNK) += chunk_heap.o
 samsung_dma_heap-$(CONFIG_DMABUF_HEAPS_SAMSUNG_CMA) += cma_heap.o
 samsung_dma_heap-$(CONFIG_DMABUF_HEAPS_SAMSUNG_CARVEOUT) += carveout_heap.o
