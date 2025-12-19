@@ -728,13 +728,6 @@ config MMAP_READAROUND_LIMIT
 	  during the sluggish situation. Add the hard upper-limit for
 	  mmap readaround.
 
-config RBIN
-	bool "RBIN memory support"
-	default y
-	select CLEANCACHE
-	help
-	  This provides RBIN functionality in memory management.
-
 config PAGE_BOOST
 	bool "PAGE_BOOST feature"
 	depends on MMU

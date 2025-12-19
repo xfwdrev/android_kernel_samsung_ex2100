@@ -219,10 +219,10 @@ extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
 extern unsigned long sysctl_overcommit_kbytes;
 
-extern int overcommit_ratio_handler(struct ctl_table *, int, void __user *,
-				    size_t *, loff_t *);
-extern int overcommit_kbytes_handler(struct ctl_table *, int, void __user *,
-				    size_t *, loff_t *);
+int overcommit_ratio_handler(struct ctl_table *, int, void *, size_t *,
+		loff_t *);
+int overcommit_kbytes_handler(struct ctl_table *, int, void *, size_t *,
+		loff_t *);
 
 #define nth_page(page,n) pfn_to_page(page_to_pfn((page)) + (n))
 
@@ -2464,17 +2464,17 @@ extern int min_free_kbytes;
 extern int watermark_boost_factor;
 extern int watermark_scale_factor;
 
-/* ion_rbin_heap */
-void wake_ion_rbin_heap_prereclaim(void);
-void wake_ion_rbin_heap_shrink(void);
+// /* ion_rbin_heap */
+// void wake_ion_rbin_heap_prereclaim(void);
+// void wake_ion_rbin_heap_shrink(void);
 
-/* rbincache.c */
-int init_rbincache(unsigned long pfn, unsigned long nr_pages);
-extern unsigned long totalrbin_pages;
-extern atomic_t rbin_free_pages;
-extern atomic_t rbin_allocated_pages;
-extern atomic_t rbin_cached_pages;
-extern atomic_t rbin_pool_pages;
+// /* rbincache.c */
+// int init_rbincache(unsigned long pfn, unsigned long nr_pages);
+// extern unsigned long totalrbin_pages;
+// extern atomic_t rbin_free_pages;
+// extern atomic_t rbin_allocated_pages;
+// extern atomic_t rbin_cached_pages;
+// extern atomic_t rbin_pool_pages;
 
 /* nommu.c */
 extern atomic_long_t mmap_pages_allocated;
@@ -3015,8 +3015,8 @@ extern bool process_shares_mm(struct task_struct *p, struct mm_struct *mm);
 
 #ifdef CONFIG_SYSCTL
 extern int sysctl_drop_caches;
-int drop_caches_sysctl_handler(struct ctl_table *, int,
-					void __user *, size_t *, loff_t *);
+int drop_caches_sysctl_handler(struct ctl_table *, int, void *, size_t *,
+		loff_t *);
 #endif
 
 void drop_slab(void);
