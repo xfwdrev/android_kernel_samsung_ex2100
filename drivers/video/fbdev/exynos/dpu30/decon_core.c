@@ -68,6 +68,8 @@
 /* decon systrace */
 #include <trace/events/systrace.h>
 
+#include <linux/dma-heap.h>
+
 int decon_log_level = 6;
 module_param(decon_log_level, int, 0644);
 int dpu_bts_log_level = 6;
@@ -4999,6 +5001,7 @@ static int decon_fb_alloc_memory(struct decon_device *decon, struct decon_win *w
 	unsigned int real_size, virt_size, size;
 	dma_addr_t map_dma;
 	struct dma_buf *buf = NULL;
+	struct dma_heap *dma_heap;
 	void *vaddr;
 	unsigned int ret;
 
@@ -5018,12 +5021,28 @@ static int decon_fb_alloc_memory(struct decon_device *decon, struct decon_win *w
 	fbi->fix.smem_len = size;
 	size = PAGE_ALIGN(size);
 
-	dev_info(decon->dev, "want %u bytes for window[%d]\n", size, win->idx);
-	buf = ion_alloc((size_t)size, ION_HEAP_SYSTEM, 0);
-	if (IS_ERR(buf)) {
-		dev_err(decon->dev, "ion_share_dma_buf() failed\n");
-		goto err_share_dma_buf;
-	}
+	// dev_info(decon->dev, "want %u bytes for window[%d]\n", size, win->idx);
+	// buf = ion_alloc((size_t)size, ION_HEAP_SYSTEM, 0);
+	// if (IS_ERR(buf)) {
+	// 	dev_err(decon->dev, "ion_share_dma_buf() failed\n");
+	// 	goto err_share_dma_buf;
+	// }
+
+	  dev_info(decon->dev, "want %u bytes for window[%d]\n", size, win->idx);
+
+		dma_heap = dma_heap_find("system-uncached");
+		if (dma_heap) {
+			buf = dma_heap_buffer_alloc(dma_heap, (size_t)size, 0, 0);
+			dma_heap_put(dma_heap);
+		} else {
+			pr_err("dma_heap_find() failed\n");
+			goto err_share_dma_buf;
+		}
+		if (IS_ERR(buf)) {
+			dev_err(dsim->dev, "ion_alloc() failed\n");
+			goto err_share_dma_buf;
+		}
+
 
 	vaddr = dma_buf_vmap(buf);
 	if (IS_ERR_OR_NULL(vaddr)) {
@@ -5094,6 +5113,7 @@ static int decon_fb_test_alloc_memory(struct decon_device *decon, u32 size)
 	struct device *dev = NULL;
 	dma_addr_t map_dma;
 	struct dma_buf *buf;
+	struct dma_heap *dma_heap;
 	void *vaddr;
 	unsigned int ret;
 
@@ -5103,13 +5123,28 @@ static int decon_fb_test_alloc_memory(struct decon_device *decon, u32 size)
 	size = PAGE_ALIGN(size);
 	fbi->fix.smem_len = size;
 
+	// dev_info(decon->dev, "want %u bytes for window[%d]\n", size, win->idx);
+
+	// buf = ion_alloc((size_t)size, ION_HEAP_SYSTEM, 0);
+	// if (IS_ERR(buf)) {
+	// 	dev_err(decon->dev, "ion_share_dma_buf() failed\n");
+	// 	goto err_share_dma_buf;
+	// }
+
 	dev_info(decon->dev, "want %u bytes for window[%d]\n", size, win->idx);
 
-	buf = ion_alloc((size_t)size, ION_HEAP_SYSTEM, 0);
-	if (IS_ERR(buf)) {
-		dev_err(decon->dev, "ion_share_dma_buf() failed\n");
-		goto err_share_dma_buf;
-	}
+		dma_heap = dma_heap_find("system-uncached");
+		if (dma_heap) {
+			buf = dma_heap_buffer_alloc(dma_heap, (size_t)size, 0, 0);
+			dma_heap_put(dma_heap);
+		} else {
+			pr_err("dma_heap_find() failed\n");
+			goto err_share_dma_buf;
+		}
+		if (IS_ERR(buf)) {
+			dev_err(dsim->dev, "ion_alloc() failed\n");
+			goto err_share_dma_buf;
+		}
 
 	vaddr = dma_buf_vmap(buf);
 	if (IS_ERR_OR_NULL(vaddr)) {
