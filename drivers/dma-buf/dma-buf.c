@@ -29,8 +29,6 @@
 #include <uapi/linux/dma-buf.h>
 #include <uapi/linux/magic.h>
 
-#include "dma-buf-trace.h"
-
 struct dma_buf_list {
 	struct list_head head;
 	struct mutex lock;
@@ -61,8 +59,6 @@ static void dma_buf_release(struct dentry *dentry)
 	dmabuf = dentry->d_fsdata;
 	if (unlikely(!dmabuf))
 		return;
-
-	dmabuf_trace_free(dmabuf);
 
 	BUG_ON(dmabuf->vmapping_counter);
 
@@ -407,10 +403,6 @@ static long dma_buf_ioctl(struct file *file,
 	case DMA_BUF_SET_NAME_A:
 	case DMA_BUF_SET_NAME_B:
 		return dma_buf_set_name(dmabuf, (const char __user *)arg);
-	case DMA_BUF_IOCTL_TRACK:
-		return dmabuf_trace_track_buffer(dmabuf);
-	case DMA_BUF_IOCTL_UNTRACK:
-		return dmabuf_trace_untrack_buffer(dmabuf);
 
 	default:
 		return -ENOTTY;
@@ -588,8 +580,6 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	mutex_lock(&db_list.lock);
 	list_add(&dmabuf->list_node, &db_list.head);
 	mutex_unlock(&db_list.lock);
-
-	dmabuf_trace_alloc(dmabuf);
 
 	return dmabuf;
 

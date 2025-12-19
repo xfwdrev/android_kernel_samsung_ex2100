@@ -6302,7 +6302,7 @@ static void exynos_decon_unregister(void)
 }
 late_initcall(exynos_decon_register);
 module_exit(exynos_decon_unregister);
-MODULE_SOFTDEP("pre: cmupmucal clk_exynos exynos-pmu-if pinctrl-samsung-core fb phy-exynos-mipi exynos-pd exynos-pd-dbg samsung-iommu");
+MODULE_SOFTDEP("pre: cmupmucal clk_exynos exynos-pmu-if pinctrl-samsung-core fb phy-exynos-mipi exynos-pd exynos-pd-dbg samsung-iommu samsung_dma_heap");
 
 MODULE_AUTHOR("Jaehoe Yang <jaehoe.yang@samsung.com>");
 MODULE_AUTHOR("Yeongran Shin <yr613.shin@samsung.com>");

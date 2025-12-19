@@ -9235,6 +9235,11 @@
 		};
 	};
 
+	system_dma_heap {
+		compatible = "samsung,dma-heap-system";
+		dma-heap,name = "system";
+	};
+
 	memlog_bl_base {
 		samsung,bl-base = <0xf0000000>;
 		samsung,bl-offset = <0x290>;
@@ -13657,60 +13662,6 @@
 		#size-cells = <0x01>;
 		ranges;
 		phandle = <0x31c>;
-	};
-
-	system_dma_heap {
-		compatible = "samsung,dma_heap,system";
-		dma_heap,name = "system";
-	};
-
-	video_system_dma_heap {
-		compatible = "samsung,dma_heap,system";
-		dma_heap,name = "video_system";
-		dma_heap,video_aligned;
-	};
-
-	crypto_dma_heap {
-		compatible = "samsung,dma_heap,cma";
-		memory-region = <0x100>;
-		dma_heap,name = "crypto";
-	};
-
-	video_stream_dma_heap {
-		compatible = "samsung,dma_heap,cma";
-		memory-region = <0x101>;
-		dma_heap,name = "vstream";
-		dma_heap,video_aligned;
-		dma_heap,secure;
-		dma_heap,protection_id = <0x03>;
-		dma_heap,alignment = <0x10000>;
-	};
-
-	video_frame_dma_heap {
-		compatible = "samsung,dma_heap,cma";
-		memory-region = <0x102>;
-		dma_heap,name = "vframe";
-		dma_heap,secure;
-		dma_heap,protection_id = <0x05>;
-		dma_heap,alignment = <0x10000>;
-	};
-
-	video_scaler_dma_heap {
-		compatible = "samsung,dma_heap,cma";
-		memory-region = <0x103>;
-		dma_heap,name = "vscaler";
-		dma_heap,secure;
-		dma_heap,protection_id = <0x06>;
-		dma_heap,alignment = <0x10000>;
-	};
-
-	gpu_buffer_dma_heap {
-		compatible = "samsung,dma_heap,cma";
-		memory-region = <0x104>;
-		dma_heap,name = "gpu_buffer";
-		dma_heap,secure;
-		dma_heap,protection_id = <0x09>;
-		dma_heap,alignment = <0x10000>;
 	};
 
 	sysreg_hsi0@10A20000 {

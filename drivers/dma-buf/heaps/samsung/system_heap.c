@@ -257,6 +257,7 @@ static struct platform_driver system_heap_driver = {
 int __init system_dma_heap_init(void)
 {
 	int i;
+	pr_info("system_dma_heap_init: enter\n");
 
 	for (i = 0; i < NUM_ORDERS; i++) {
 		pools[i] = dmabuf_page_pool_create(order_flags[i], orders[i]);

@@ -12,4 +12,3 @@ dmabuf_selftests-y := \
 	st-dma-fence.o
 
 obj-$(CONFIG_DMABUF_SELFTESTS)	+= dmabuf_selftests.o
-obj-$(CONFIG_DMABUF_TRACE)	+= dma-buf-trace.o
