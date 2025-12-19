@@ -643,7 +643,7 @@ static int _is_dbufcon_get_count(struct dma_buf *dbufcon)
 	return dmabuf_container_get_count(dbufcon);
 }
 #else
-static long is_dbufcon_prepare(struct is_vb2_buf *vbuf, truct device *dev)
+static long is_dbufcon_prepare(struct is_vb2_buf *vbuf, struct device *dev)
 {
 	return 0;
 }
@@ -672,7 +672,7 @@ static void is_dbufcon_kunmap(struct is_vb2_buf *vbuf, u32 plane)
 static int _is_dbufcon_get_count(struct dma_buf *dbufcon)
 {
 	/* It's not dma_buf_containter FD */
-	return -1
+	return -1;
 }
 #endif
 
