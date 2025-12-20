@@ -1,8 +1,5 @@
 #!/bin/bash
 
-PATCH_FILE="$PWD/patches/0001-kernel-susfs-bring-back-susfs-try_umount.patch"
-PATCH_DIR="$PWD/KernelSU"
-
 abort()
 {
     cd -
@@ -51,7 +48,7 @@ done
 
 fetch_ksu() {
 
-    rm -rf "$PATCH_DIR"
+    rm -rf "$PWD/KernelSU"
 
         echo "Fetching latest RKSU"
         git submodule update --init --recursive || {
@@ -409,16 +406,6 @@ if [[ "$KSU_OPTION" == "y" ]]; then
 
     git -C KernelSU fetch origin
     git -C KernelSU checkout -B "$KSU_BRANCH" "origin/$KSU_BRANCH"
-
-    if [[ "$SUSFS_OPTION" == "y" && $KSU_BRANCH == "susfs-rksu-master" ]]; then
-
-        echo "Applying try_umount patch"
-        patch -d "$PATCH_DIR" -p1 < "$PATCH_FILE" || {
-            echo "Failed to apply patch!"
-            exit 1
-        }
-    
-    fi
 
     if ! grep -Fxq "$KSU" "$KCONFIG_FILE"; then
         sed -i "\|endmenu|i $KSU" "$KCONFIG_FILE"
