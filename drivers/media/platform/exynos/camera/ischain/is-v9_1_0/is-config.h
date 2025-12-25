@@ -291,6 +291,8 @@
 #define SECURE_CAMERA_MEM_SIZE		(0x038B0000)
 #define NON_SECURE_CAMERA_MEM_ADDR	(0x0)	/* camera_heap */
 #define NON_SECURE_CAMERA_MEM_SIZE	(0x0)
+#define ION_EXYNOS_FLAG_PROTECTED	BIT(16)
+#define ION_EXYNOS_FLAG_IOVA_EXTENSION	BIT(20)
 
 #undef SECURE_CAMERA_FACE_SEQ_CHK	/* To check sequence before applying secure protection */
 #endif
@@ -409,4 +411,11 @@
 
 #define CONFIG_DISABLE_CAMERA_MEM_ATTR
 #define VH_FPSIMD_API
+
+#define USE_CAMERA_HEAP
+#define CAMERA_HEAP_NAME	"camera"
+#define CAMERA_HEAP_NAME_LEN	6
+#define CAMERA_HEAP_UNCACHED_NAME	"camera-uncached"
+#define CAMERA_HEAP_UNCACHED_NAME_LEN	15
+
 #endif /* #ifndef IS_CONFIG_H */

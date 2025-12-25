@@ -1166,7 +1166,7 @@ static int __is_subdev_internal_get_cap_node_num(const struct is_subdev *subdev)
 }
 
 static int __is_subdev_internal_get_cap_node_info(const struct is_subdev *subdev, u32 *vid,
-	u32 *num_planes, u32 *buffer_size, u32 index)
+	u32 *num_planes, u32 *buffer_size, u32 index, u32 scenario, char *heapname)
 {
 	int ret = 0;
 	u32 l0_width;
@@ -1188,6 +1188,8 @@ static int __is_subdev_internal_get_cap_node_info(const struct is_subdev *subdev
 			*num_planes = 2;
 			*buffer_size =
 				ALIGN(DIV_ROUND_UP(l2_width * subdev->bits_per_pixel, BITS_PER_BYTE), 16) * l2_height;
+			if (scenario == IS_SCENARIO_SECURE)
+				snprintf(heapname, 21, SECURE_HEAPNAME);
 			break;
 		case IS_VIDEO_YDG_NUM:
 			*num_planes = 1;
@@ -1260,6 +1262,7 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 	u32 batch_num;
 	u32 payload_size, header_size;
 	u32 sbwc_en;
+	char heapname[25];
 
 	FIMC_BUG(!subdev);
 
@@ -1312,15 +1315,12 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 		msinfo(" %s IOVA_EXTENSION_USE\n", subdev, subdev, __func__);
 	}
 
-	if (subdev->id == ENTRY_YPP && core->scenario == IS_SCENARIO_SECURE) {
-		mem->default_ctx->heapmask_s = is_ion_query_heapmask("secure_camera_heap");
-		if (!mem->default_ctx->heapmask_s) {
-			mserr("can't find secure_camera_heap in ion", subdev, subdev);
-			return -EINVAL;
+	if (!strncmp(heapname, SECURE_HEAPNAME, 20)) {
+		if (IS_ENABLED(CONFIG_ION)) {
+			flags |= ION_EXYNOS_FLAG_PROTECTED;
+			msinfo(" %s scenario(%d) ION flag(0x%x)\n", subdev, subdev,
+							__func__, core->scenario, flags);
 		}
-		flags |= ION_EXYNOS_FLAG_PROTECTED;
-		msinfo(" %s heapmask(0x%x),heapmask_s(0x%x) scenario(%d) flag(0x%x)\n", subdev, subdev, __func__,
-			mem->default_ctx->heapmask, mem->default_ctx->heapmask_s, core->scenario, flags);
 	}
 
 	ret = frame_manager_open(&subdev->internal_framemgr, subdev->buffer_num);
@@ -1338,31 +1338,31 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 		goto err_open_shared_framemgr;
 	}
 
+#if defined(USE_CAMERA_HEAP)
+	memset(heapname, '\0', sizeof(heapname));
+#if defined(USE_CAMERA_HEAP_FOR_ALL)
+	if (core->scenario != IS_SCENARIO_SECURE)
+		strcpy(heapname, CAMERA_HEAP_NAME);
+#else
+	if (core->scenario != IS_SCENARIO_SECURE && subdev->instance == 0)
+		strcpy(heapname, CAMERA_HEAP_NAME);
+#endif
+#endif
+
 	for (i = 0; i < subdev->buffer_num; i++) {
 		if (use_shared_framemgr > 0) {
 			subdev->pb_subdev[i] = shared_framemgr->frames[i].pb_output;
 		} else {
-#if defined(CONFIG_CAMERA_VENDER_MCD)
-			if (core->scenario != IS_SCENARIO_SECURE && subdev->instance == 0) {
-				subdev->pb_subdev[i] = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, total_size, "camera_heap", flags);
-				if (IS_ERR_OR_NULL(subdev->pb_subdev[i])) {
-					msinfo("not enough reserved memory, use ion system heap instead, total_size = %d", subdev, subdev, total_size);
-
-					subdev->pb_subdev[i] = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, total_size, NULL, flags);
-					if (IS_ERR_OR_NULL(subdev->pb_subdev[i])) {
-						mserr("failed to allocate buffer for internal subdev",
-										subdev, subdev);
-						subdev->pb_subdev[i] = NULL;
-						ret = -ENOMEM;
-						goto err_allocate_pb_subdev;
-					}
-				} else {
-					msinfo("success to alloc reserved memory, size = %d", subdev, subdev, total_size);
-				}
-			} else
+			if (num_planes) {
+#if defined(USE_CAMERA_HEAP)
+				subdev->pb_subdev[i] =
+					CALL_PTR_MEMOP(mem, alloc, mem->priv, total_size, heapname,
+						flags);
+#else				
+				subdev->pb_subdev[i] =
+					CALL_PTR_MEMOP(mem, alloc, mem->priv, total_size, heapname,
+						flags);
 #endif
-			{
-				subdev->pb_subdev[i] = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, total_size, NULL, flags);
 				if (IS_ERR_OR_NULL(subdev->pb_subdev[i])) {
 					mserr("failed to allocate buffer for internal subdev",
 									subdev, subdev);
@@ -1370,6 +1370,8 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 					ret = -ENOMEM;
 					goto err_allocate_pb_subdev;
 				}
+			} else {
+				subdev->pb_subdev[i] = NULL;
 			}
 
 			if (shared_framemgr)
@@ -1392,7 +1394,7 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 		snode->sframe[0].dva[0] = frame->dvaddr_buffer[0] =
 			CALL_BUFOP(subdev->pb_subdev[i], dvaddr, subdev->pb_subdev[i]);
 
-		if (core->scenario == IS_SCENARIO_SECURE)
+		if (!strncmp(heapname, SECURE_HEAPNAME, 20))
 			frame->kvaddr_buffer[0] = 0;
 		else
 			frame->kvaddr_buffer[0] = CALL_BUFOP(subdev->pb_subdev[i], kvaddr, subdev->pb_subdev[i]);
@@ -1413,8 +1415,9 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 		snode = &frame->cap_node;
 
 		for (j = 0; j < cap_node_num; j++) {
+			memset(heapname, '\0', sizeof(heapname));
 			ret = __is_subdev_internal_get_cap_node_info(subdev,
-				&snode->sframe[j].id, &snode->sframe[j].num_planes, &buffer_size, j);
+				&snode->sframe[j].id, &snode->sframe[j].num_planes, &buffer_size, j, core->scenario, heapname);
 			if (ret) {
 				subdev->pb_capture_subdev[i][j] = NULL;
 				goto err_allocate_pb_capture_subdev;
@@ -1424,39 +1427,21 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 				queue->framecfg.hw_pixeltype;
 			total_size = buffer_size * snode->sframe[j].num_planes;
 
-			if (j == 0 && core->scenario == IS_SCENARIO_SECURE) {
-				/* NR_DS */
+			if (!strncmp(heapname, SECURE_HEAPNAME, 20))
 				flags |= ION_EXYNOS_FLAG_PROTECTED;
-			} else
+			else
 				flags = 0;
 
 			if (use_shared_framemgr > 0) {
 				subdev->pb_capture_subdev[i][j] = shared_framemgr->frames[i].pb_capture[j];
 			} else {
-#if defined(CONFIG_CAMERA_VENDER_MCD)
-				if (core->scenario != IS_SCENARIO_SECURE && subdev->instance == 0) {
-					subdev->pb_capture_subdev[i][j] = CALL_PTR_MEMOP(mem, alloc,
-						mem->default_ctx, total_size, "camera_heap", flags);
-					if (IS_ERR_OR_NULL(subdev->pb_capture_subdev[i][j])) {
-						msinfo("not enough reserved memory, use ion system heap instead, total_size = %d", subdev, subdev, total_size);
-
-						subdev->pb_capture_subdev[i][j] = CALL_PTR_MEMOP(mem, alloc,
-							mem->default_ctx, total_size, NULL, flags);
-						if (IS_ERR_OR_NULL(subdev->pb_capture_subdev[i][j])) {
-							mserr("failed to allocate buffer for internal subdev",
-											subdev, subdev);
-							subdev->pb_capture_subdev[i][j] = NULL;
-							ret = -ENOMEM;
-							goto err_allocate_pb_capture_subdev;
-						}
-					} else {
-						msinfo("success to alloc reserved memory, size = %d", subdev, subdev, total_size);
-					}
-				} else
+				if (total_size) {
+#if defined(USE_CAMERA_HEAP)
+						if (core->scenario != IS_SCENARIO_SECURE && subdev->instance == 0)
+							strcpy(heapname, CAMERA_HEAP_NAME);
 #endif
-				{
 					subdev->pb_capture_subdev[i][j] = CALL_PTR_MEMOP(mem, alloc,
-						mem->default_ctx, total_size, NULL, flags);
+						mem->priv, total_size, heapname, flags);
 					if (IS_ERR_OR_NULL(subdev->pb_capture_subdev[i][j])) {
 						mserr("failed to allocate buffer for internal subdev",
 										subdev, subdev);
@@ -1475,7 +1460,7 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 			snode->sframe[j].backup_dva[0] = snode->sframe[j].dva[0] =
 				CALL_BUFOP(subdev->pb_capture_subdev[i][j], dvaddr, subdev->pb_capture_subdev[i][j]);
 
-			if (j == 0 && core->scenario == IS_SCENARIO_SECURE)
+			if (!strncmp(heapname, SECURE_HEAPNAME, 20))
 				snode->sframe[j].kva[0] = 0;
 			else
 				snode->sframe[j].kva[0] = CALL_BUFOP(subdev->pb_capture_subdev[i][j],

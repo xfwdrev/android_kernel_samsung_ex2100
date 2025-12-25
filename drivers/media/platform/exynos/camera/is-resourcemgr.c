@@ -175,18 +175,10 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 	int i;
 
 	minfo->total_size = 0;
-	/* setfile */
-	minfo->pb_setfile = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, SETFILE_SIZE, NULL, 0);
-	if (IS_ERR_OR_NULL(minfo->pb_setfile)) {
-		err("failed to allocate buffer for SETFILE");
-		return -ENOMEM;
-	}
-	minfo->total_size += minfo->pb_setfile->size;
-	info("[RSC]memory_alloc(SETFILE_SIZE): 0x%08lx\n", minfo->pb_setfile->size);
 
 	/* calibration data for each sensor postion */
 	for (i = 0; i < SENSOR_POSITION_MAX; i++) {
-		minfo->pb_cal[i] = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, TOTAL_CAL_DATA_SIZE, NULL, 0);
+		minfo->pb_cal[i] = CALL_PTR_MEMOP(mem, alloc, mem->priv, TOTAL_CAL_DATA_SIZE, NULL, 0);
 		if (IS_ERR_OR_NULL(minfo->pb_cal[i])) {
 			err("failed to allocate buffer for TOTAL_CAL_DATA");
 			return -ENOMEM;
@@ -198,10 +190,10 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 
 	/* library logging */
 #if !defined(ENABLE_CLOG_RESERVED_MEM)
-	minfo->pb_debug = mem->kmalloc(DEBUG_REGION_SIZE + 0x10, 16);
+	minfo->pb_debug = mem->contig_alloc(DEBUG_REGION_SIZE + 0x10);
 	if (IS_ERR_OR_NULL(minfo->pb_debug)) {
 		/* retry by ION */
-		minfo->pb_debug = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, DEBUG_REGION_SIZE + 0x10, NULL, 0);
+		minfo->pb_debug = CALL_PTR_MEMOP(mem, alloc, mem->priv, DEBUG_REGION_SIZE + 0x10, NULL, 0);
 		if (IS_ERR_OR_NULL(minfo->pb_debug)) {
 			err("failed to allocate buffer for DEBUG_REGION");
 			return -ENOMEM;
@@ -211,10 +203,10 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 	info("[RSC]memory_alloc(DEBUG_REGION_SIZE): 0x%08lx\n", minfo->pb_debug->size);
 #endif
 	/* library event logging */
-	minfo->pb_event = mem->kmalloc(EVENT_REGION_SIZE + 0x10, 16);
+	minfo->pb_event = mem->contig_alloc(EVENT_REGION_SIZE + 0x10);
 	if (IS_ERR_OR_NULL(minfo->pb_event)) {
 		/* retry by ION */
-		minfo->pb_event = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, EVENT_REGION_SIZE + 0x10, NULL, 0);
+		minfo->pb_event = CALL_PTR_MEMOP(mem, alloc, mem->priv, EVENT_REGION_SIZE + 0x10, NULL, 0);
 		if (IS_ERR_OR_NULL(minfo->pb_event)) {
 			err("failed to allocate buffer for EVENT_REGION");
 			return -ENOMEM;
@@ -223,17 +215,8 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 	minfo->total_size += minfo->pb_event->size;
 	info("[RSC]memory_alloc(EVENT_REGION_SIZE): 0x%08lx\n", minfo->pb_event->size);
 
-	/* data region */
-	minfo->pb_dregion = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, DATA_REGION_SIZE, NULL, 0);
-	if (IS_ERR_OR_NULL(minfo->pb_dregion)) {
-		err("failed to allocate buffer for DATA_REGION");
-		return -ENOMEM;
-	}
-	minfo->total_size += minfo->pb_dregion->size;
-	info("[RSC]memory_alloc(DATA_REGION_SIZE): 0x%08lx\n", minfo->pb_dregion->size);
-
 	/* parameter region */
-	minfo->pb_pregion = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_pregion = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 						(IS_STREAM_COUNT * PARAM_REGION_SIZE), NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_pregion)) {
 		err("failed to allocate buffer for PARAM_REGION");
@@ -244,7 +227,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 		IS_STREAM_COUNT, minfo->pb_pregion->size);
 
 	/* fshared data region */
-	minfo->pb_fshared = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, FSHARED_REGION_SIZE, NULL, 0);
+	minfo->pb_fshared = CALL_PTR_MEMOP(mem, alloc, mem->priv, FSHARED_REGION_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_fshared)) {
 		err("failed to allocate buffer for FSHARED_REGION");
 		return -ENOMEM;
@@ -254,7 +237,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 
 #if !defined(ENABLE_DYNAMIC_MEM)
 	/* 3aa/isp internal DMA buffer */
-	minfo->pb_taaisp = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_taaisp = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 				TAAISP_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_taaisp)) {
 		err("failed to allocate buffer for TAAISP_DMA");
@@ -265,7 +248,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 
 	/* ME/DRC buffer */
 #if (MEDRC_DMA_SIZE > 0)
-	minfo->pb_medrc = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_medrc = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 				MEDRC_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_medrc)) {
 		err("failed to allocate buffer for ME_DRC");
@@ -278,7 +261,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 
 #if defined(ENABLE_TNR)
 	/* TNR internal DMA buffer */
-	minfo->pb_tnr = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, tnr_size, NULL, 0);
+	minfo->pb_tnr = CALL_PTR_MEMOP(mem, alloc, mem->priv, tnr_size, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_tnr)) {
 		err("failed to allocate buffer for TNR DMA");
 		return -ENOMEM;
@@ -288,7 +271,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 #endif
 #if (ORBMCH_DMA_SIZE > 0)
 	/* ORBMCH internal DMA buffer */
-	minfo->pb_orbmch = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, ORBMCH_DMA_SIZE, NULL, 0);
+	minfo->pb_orbmch = CALL_PTR_MEMOP(mem, alloc, mem->priv, ORBMCH_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_orbmch)) {
 		err("failed to allocate buffer for ORBMCH DMA");
 		return -ENOMEM;
@@ -298,7 +281,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 #endif
 #if (CLAHE_DMA_SIZE > 0)
 	/* CLAHE internal DMA buffer */
-	minfo->pb_clahe = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, CLAHE_DMA_SIZE, NULL, 0);
+	minfo->pb_clahe = CALL_PTR_MEMOP(mem, alloc, mem->priv, CLAHE_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_clahe)) {
 		err("failed to allocate buffer for CLAHE DMA");
 		return -ENOMEM;
@@ -309,7 +292,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 #endif
 
 #if defined (ENABLE_VRA)
-	minfo->pb_vra = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, VRA_DMA_SIZE, NULL, 0);
+	minfo->pb_vra = CALL_PTR_MEMOP(mem, alloc, mem->priv, VRA_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_vra)) {
 		err("failed to allocate buffer for VRA");
 		return -ENOMEM;
@@ -318,7 +301,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 	info("[RSC]memory_alloc(VRA_DMA_SIZE): 0x%08lx\n", minfo->pb_vra->size);
 #endif
 #if defined (ENABLE_VRA_NETARRAY)
-	minfo->pb_vra_netarray = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, VRA_NET_SIZE, NULL, 0);
+	minfo->pb_vra_netarray = CALL_PTR_MEMOP(mem, alloc, mem->priv, VRA_NET_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_vra_netarray)) {
 		err("failed to allocate buffer for VRA network array");
 		return -ENOMEM;
@@ -328,7 +311,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 #endif
 
 #if defined (ENABLE_DNR_IN_MCSC)
-	minfo->pb_mcsc_dnr = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, MCSC_DNR_DMA_SIZE, NULL, 0);
+	minfo->pb_mcsc_dnr = CALL_PTR_MEMOP(mem, alloc, mem->priv, MCSC_DNR_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_mcsc_dnr)) {
 		err("failed to allocate buffer for MCSC DNR");
 		return -ENOMEM;
@@ -338,7 +321,7 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 #endif
 
 	if (DUMMY_DMA_SIZE) {
-		minfo->pb_dummy = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, DUMMY_DMA_SIZE,
+		minfo->pb_dummy = CALL_PTR_MEMOP(mem, alloc, mem->priv, DUMMY_DMA_SIZE,
 			"camera_heap", 0);
 		if (IS_ERR_OR_NULL(minfo->pb_dummy)) {
 			err("failed to allocate buffer for dummy");
@@ -519,7 +502,7 @@ static int is_resourcemgr_alloc_dynamic_mem(struct is_resourcemgr *resourcemgr)
 #endif
 
 	/* 3aa/isp internal DMA buffer */
-	minfo->pb_taaisp = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_taaisp = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 				TAAISP_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_taaisp)) {
 		err("failed to allocate buffer for TAAISP_DMA memory");
@@ -530,7 +513,7 @@ static int is_resourcemgr_alloc_dynamic_mem(struct is_resourcemgr *resourcemgr)
 
 	/* ME/DRC buffer */
 #if (MEDRC_DMA_SIZE > 0)
-	minfo->pb_medrc = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_medrc = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 				MEDRC_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_medrc)) {
 		CALL_VOID_BUFOP(minfo->pb_taaisp, free, minfo->pb_taaisp);
@@ -543,7 +526,7 @@ static int is_resourcemgr_alloc_dynamic_mem(struct is_resourcemgr *resourcemgr)
 
 #if defined(ENABLE_TNR)
 	/* TNR internal DMA buffer */
-	minfo->pb_tnr = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, tnr_size, NULL, 0);
+	minfo->pb_tnr = CALL_PTR_MEMOP(mem, alloc, mem->priv, tnr_size, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_tnr)) {
 		CALL_VOID_BUFOP(minfo->pb_taaisp, free, minfo->pb_taaisp);
 #if (MEDRC_DMA_SIZE > 0)
@@ -558,7 +541,7 @@ static int is_resourcemgr_alloc_dynamic_mem(struct is_resourcemgr *resourcemgr)
 
 #if (ORBMCH_DMA_SIZE > 0)
 	/* ORBMCH internal DMA buffer */
-	minfo->pb_orbmch = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_orbmch = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 			ORBMCH_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_orbmch)) {
 		CALL_VOID_BUFOP(minfo->pb_taaisp, free, minfo->pb_taaisp);
@@ -577,7 +560,7 @@ static int is_resourcemgr_alloc_dynamic_mem(struct is_resourcemgr *resourcemgr)
 
 #if (CLAHE_DMA_SIZE > 0)
 	/* CLAHE internal DMA buffer */
-	minfo->pb_clahe = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_clahe = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 			CLAHE_DMA_SIZE, NULL, 0);
 	if (IS_ERR_OR_NULL(minfo->pb_clahe)) {
 		CALL_VOID_BUFOP(minfo->pb_taaisp, free, minfo->pb_taaisp);
@@ -680,7 +663,7 @@ static int is_resourcemgr_alloc_secure_mem(struct is_resourcemgr *resourcemgr)
 
 #if defined(SECURE_CAMERA_TAAISP)
 	/* 3aa/isp internal DMA buffer */
-	minfo->pb_taaisp_s = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_taaisp_s = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 				TAAISP_DMA_SIZE, "camera_heap",
 				ION_FLAG_CACHED | ION_FLAG_PROTECTED);
 	if (IS_ERR_OR_NULL(minfo->pb_taaisp_s)) {
@@ -694,11 +677,11 @@ static int is_resourcemgr_alloc_secure_mem(struct is_resourcemgr *resourcemgr)
 	/* ME/DRC buffer */
 #if (MEDRC_DMA_SIZE > 0)
 #if defined(SECURE_CAMERA_USE_EXT_HEAP)
-	minfo->pb_medrc_s = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_medrc_s = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 			MEDRC_DMA_SIZE, "secure_camera_heap_drc",
 			ION_FLAG_CACHED | ION_FLAG_PROTECTED);
 #else
-	minfo->pb_medrc_s = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_medrc_s = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 				MEDRC_DMA_SIZE, "secure_camera_heap",
 				ION_FLAG_CACHED | ION_FLAG_PROTECTED);
 #endif
@@ -713,13 +696,13 @@ static int is_resourcemgr_alloc_secure_mem(struct is_resourcemgr *resourcemgr)
 #endif
 #if defined(SECURE_CAMERA_TNR)
 	/* TNR secure internal DMA buffer */
-	mem->default_ctx->heapmask_s = is_ion_query_heapmask("secure_camera_heap");
-	if (!mem->default_ctx->heapmask_s) {
+	mem->priv->heapmask_s = is_ion_query_heapmask("secure_camera_heap");
+	if (!mem->priv->heapmask_s) {
 		err("can't find secure_camera_heap in ion");
 		return -EINVAL;
 	}
 
-	minfo->pb_tnr_s = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx,
+	minfo->pb_tnr_s = CALL_PTR_MEMOP(mem, alloc, mem->priv,
 				TNR_S_DMA_SIZE, "secure_camera_heap",
 				ION_EXYNOS_FLAG_PROTECTED);
 	if (IS_ERR_OR_NULL(minfo->pb_tnr_s)) {
@@ -954,7 +937,7 @@ static int is_mem_map_vm(struct is_resourcemgr *resourcemgr,
 		return -ENOMEM;
 	}
 
-	pb = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, heap_size, NULL, 0);
+	pb = CALL_PTR_MEMOP(mem, alloc, mem->priv, heap_size, NULL, 0);
 	if (IS_ERR_OR_NULL(pb)) {
 		err("failed to allocate buffer for HEAP");
 		vfree(pages);
@@ -1047,7 +1030,7 @@ int is_heap_mem_alloc_dynamic(struct is_resourcemgr *resourcemgr,
 			return 0;
 		}
 
-		minfo->pb_heap_ddk = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, heap_size, NULL, 0);
+		minfo->pb_heap_ddk = CALL_PTR_MEMOP(mem, alloc, mem->priv, heap_size, NULL, 0);
 		if (IS_ERR_OR_NULL(minfo->pb_heap_ddk)) {
 			err("failed to allocate buffer for DDK HEAP");
 			return -ENOMEM;
@@ -1062,7 +1045,7 @@ int is_heap_mem_alloc_dynamic(struct is_resourcemgr *resourcemgr,
 			return 0;
 		}
 
-		minfo->pb_heap_rta = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, heap_size, NULL, 0);
+		minfo->pb_heap_rta = CALL_PTR_MEMOP(mem, alloc, mem->priv, heap_size, NULL, 0);
 		if (IS_ERR_OR_NULL(minfo->pb_heap_rta)) {
 			err("failed to allocate buffer for RTA HEAP");
 			return -ENOMEM;

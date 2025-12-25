@@ -20,15 +20,8 @@
 #include "is-framemgr.h"
 #include "exynos-is-sensor.h"
 
-#define ION_EXYNOS_FLAG_PROTECTED		BIT(16)
-#define ION_EXYNOS_FLAG_IOVA_EXTENSION		BIT(20)
+#define SECURE_HEAPNAME "secure_camera-secure"
 
-enum is_cache_ops {
-	IS_SYNC_FOR_DEVICE,
-	IS_SYNC_FOR_CPU,
-};
-
-#ifdef ENABLE_LOGICAL_VIDEO_NODE
 struct is_sub_dma_buf {
 	u32				vid;
 	u32				num_plane;
@@ -48,7 +41,6 @@ struct is_sub_buf {
 	u32				ldr_vid;
 	struct is_sub_dma_buf		sub[CAPTURE_NODE_MAX];
 };
-#endif
 
 struct is_vb2_buf;
 struct is_vb2_buf_ops {
@@ -64,7 +56,6 @@ struct is_vb2_buf_ops {
 	void (*dbufcon_unmap)(struct is_vb2_buf *vbuf);
 	int (*dbufcon_kmap)(struct is_vb2_buf *vbuf, u32 plane);
 	void (*dbufcon_kunmap)(struct is_vb2_buf *vbuf, u32 plane);
-#ifdef ENABLE_LOGICAL_VIDEO_NODE
 	void (*subbuf_prepare)(struct is_sub_dma_buf *buf,
 				struct v4l2_plane *plane,
 				struct device *dev);
@@ -72,7 +63,6 @@ struct is_vb2_buf_ops {
 	ulong (*subbuf_kvmap)(struct is_sub_dma_buf *buf);
 	void (*subbuf_kunmap)(struct is_sub_dma_buf *buf);
 	void (*subbuf_finish)(struct is_sub_dma_buf *buf);
-#endif
 };
 
 struct is_vb2_buf {
@@ -83,7 +73,7 @@ struct is_vb2_buf {
 	struct dma_buf_attachment	*atch[IS_MAX_PLANES];
 	struct sg_table			*sgt[IS_MAX_PLANES];
 
-#if IS_ENABLED(CONFIG_DMA_BUF_CONTAINER)
+#if IS_ENABLED(DMABUF_CONTAINER)
 	ulong				kva[IS_MAX_PLANES];
 	dma_addr_t			dva[IS_MAX_PLANES];
 #else
@@ -108,19 +98,19 @@ struct is_priv_buf_ops {
 };
 
 struct is_priv_buf {
-	size_t					size;
-	size_t					align;
-	void					*ctx;
-	void					*kvaddr;
+	size_t				size;
+	size_t				align;
+	void				*ctx;
+	void				*kvaddr;
 
 	const struct is_priv_buf_ops	*ops;
-	void					*priv;
-	struct dma_buf				*dma_buf;
-	struct dma_buf_attachment		*attachment;
-	enum dma_data_direction			direction;
-	void					*kva;
-	dma_addr_t				iova;
-	struct sg_table				*sgt;
+	void				*priv;
+	struct dma_buf			*dma_buf;
+	struct dma_buf_attachment	*attachment;
+	enum dma_data_direction		direction;
+	void				*kva;
+	dma_addr_t			iova;
+	struct sg_table			*sgt;
 };
 
 #define vb_to_is_vb2_buf(x)				\
@@ -144,23 +134,33 @@ struct is_priv_buf {
 struct is_mem_ops {
 	void *(*init)(struct platform_device *pdev);
 	void (*cleanup)(void *ctx);
-	int (*resume)(void *ctx);
-	void (*suspend)(void *ctx);
 	void (*set_cached)(void *ctx, bool cacheable);
 	int (*set_alignment)(void *ctx, size_t alignment);
 	struct is_priv_buf *(*alloc)(void *ctx, size_t size, const char *heapname, unsigned int flags);
 };
 
 struct is_ion_ctx {
-	struct device		*dev;
-	unsigned long		alignment;
-	long			flags;
-	unsigned int		heapmask;
-	unsigned int		heapmask_s;
+	struct device	*dev;
+	unsigned long	alignment;
+	long		flags;
+	unsigned int	heapmask;
+	unsigned int	heapmask_s;
 
 	/* protects iommu_active_cnt and protected */
-	struct mutex		lock;
-	int			iommu_active_cnt;
+	struct mutex	lock;
+	int		iommu_active_cnt;
+};
+
+struct dmabuf_heap_ctx {
+	struct device	*dev;
+	struct dma_heap	*dh_system;
+	struct dma_heap	*dh_system_uncached;
+	struct dma_heap	*dh_secure_camera;
+#if defined(USE_CAMERA_HEAP)
+	struct dma_heap	*dh_camera;
+	struct dma_heap	*dh_camera_uncached;
+#endif
+	struct mutex	lock;
 };
 
 struct is_mem_stats {
@@ -182,14 +182,16 @@ struct is_mem_stats {
 };
 
 struct is_mem {
-	struct is_ion_ctx		*default_ctx;
-	struct is_ion_ctx		*phcontig_ctx;
-	const struct is_mem_ops		*is_mem_ops;
+	struct device			*dev;
+	struct is_mem_stats		*stats;
+
 	const struct vb2_mem_ops	*vb2_mem_ops;
 	const struct is_vb2_buf_ops	*is_vb2_buf_ops;
-	struct is_mem_stats		*stats;
+
+	const struct is_mem_ops		*is_mem_ops;
 	void				*priv;
-	struct is_priv_buf *(*kmalloc)(size_t size, size_t align);
+
+	struct is_priv_buf *(*contig_alloc)(size_t size);
 };
 
 #define CALL_MEMOP(mem, op, args...)			\
@@ -207,61 +209,38 @@ struct is_mem {
 	} while (0)
 
 struct is_minfo {
-	struct is_priv_buf *pb_fw;
-	struct is_priv_buf *pb_setfile;
+	struct is_priv_buf *pb_setfile[SENSOR_POSITION_MAX];
 	struct is_priv_buf *pb_cal[SENSOR_POSITION_MAX];
 	struct is_priv_buf *pb_debug;
 	struct is_priv_buf *pb_event;
 	struct is_priv_buf *pb_fshared;
-	struct is_priv_buf *pb_dregion;
 	struct is_priv_buf *pb_pregion;
 	struct is_priv_buf *pb_heap_rta; /* RTA HEAP */
 	struct is_priv_buf *pb_heap_ddk; /* DDK HEAP */
 	struct is_priv_buf *pb_taaisp;
-	struct is_priv_buf *pb_medrc;
 	struct is_priv_buf *pb_taaisp_s;	/* secure */
-	struct is_priv_buf *pb_medrc_s;	/* secure */
 	struct is_priv_buf *pb_tnr;
 	struct is_priv_buf *pb_tnr_s;	/* secure */
-	struct is_priv_buf *pb_lhfd;
 	struct is_priv_buf *pb_vra;
 	struct is_priv_buf *pb_vra_netarray;
-	struct is_priv_buf *pb_tpu;
-	struct is_priv_buf *pb_mcsc_dnr;
 	struct is_priv_buf *pb_orbmch;
 	struct is_priv_buf *pb_clahe;
+	struct is_priv_buf *pb_sfr_dump_addr;
+	struct is_priv_buf *pb_sfr_dump_value;
 
 	size_t		total_size;
 	ulong		kvaddr_debug_cnt;
 	ulong		kvaddr_event_cnt;
 
-	dma_addr_t	dvaddr;
-	ulong		kvaddr;
-	dma_addr_t	dvaddr_lib;
-	ulong		kvaddr_lib;
 	phys_addr_t	phaddr_debug;
-	dma_addr_t	dvaddr_debug;
 	ulong		kvaddr_debug;
 	phys_addr_t	phaddr_event;
-	dma_addr_t	dvaddr_event;
 	ulong		kvaddr_event;
-	dma_addr_t	dvaddr_fshared;
-	ulong		kvaddr_fshared;
-	dma_addr_t	dvaddr_region;
+	ulong		kvaddr_sfr_dump_addr;
+	ulong		kvaddr_sfr_dump_value;
 	ulong		kvaddr_region;
 
-	dma_addr_t	dvaddr_tpu;
-	ulong		kvaddr_tpu;
-	dma_addr_t	dvaddr_lhfd;	/* FD map buffer region */
-	ulong		kvaddr_lhfd;	/* NUM_FD_INTERNAL_BUF = 3 */
-	dma_addr_t	dvaddr_vra;
-	ulong		kvaddr_vra;
-	dma_addr_t	dvaddr_vra_netarray;
-	ulong		kvaddr_vra_netarray;
-	dma_addr_t	dvaddr_mcsc_dnr;
-	ulong		kvaddr_mcsc_dnr;
-
-	ulong		kvaddr_setfile;
+	ulong		kvaddr_setfile[SENSOR_POSITION_MAX];
 	ulong		kvaddr_cal[SENSOR_POSITION_MAX];
 
 	ulong		kvaddr_heap_ddk;
@@ -272,9 +251,14 @@ struct is_minfo {
 	phys_addr_t	phaddr_dummy;
 	dma_addr_t	dvaddr_dummy;
 	ulong		kvaddr_dummy;
+
+	bool		pinned_setfile[SENSOR_POSITION_MAX];
+	refcount_t	refcount_setfile[SENSOR_POSITION_MAX];
+	char		*name_setfile[SENSOR_POSITION_MAX];
 };
 
 void is_vfree_atomic(const void *addr);
+void is_mem_init_stats(void);
 void is_mem_check_stats(struct is_mem *mem);
 int is_mem_init(struct is_mem *mem, struct platform_device *pdev);
 unsigned int is_ion_query_heapmask(const char *heap_name);

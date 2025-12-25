@@ -127,8 +127,6 @@ struct is_device_ischain {
 	u32					binning;
 
 	struct is_region			*is_region;
-	ulong					kvaddr_shared;
-	dma_addr_t				dvaddr_shared;
 
 	unsigned long				state;
 	atomic_t				group_open_cnt;

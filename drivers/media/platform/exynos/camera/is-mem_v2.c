@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Samsung Exynos5 SoC series FIMC-IS driver
+ * Samsung Exynos SoC series Pablo driver
  *
- * exynos is mem functions
- *
- * Copyright (c) 2020 Samsung Electronics Co., Ltd
+ * Copyright (c) 2021 Samsung Electronics Co., Ltd
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -28,13 +27,23 @@
 #include <linux/vmalloc.h>
 #include <linux/interrupt.h>
 #include <linux/of.h>
+#if IS_ENABLED(CONFIG_DMA_SHARED_BUFFER)
 #include <linux/dma-buf.h>
+#if IS_ENABLED(CONFIG_DMA_BUF_CONTAINER) || IS_ENABLED(CONFIG_DMABUF_CONTAINER)
 #include <linux/dma-buf-container.h>
+#endif
+#endif
+#if IS_ENABLED(CONFIG_ION)
 #include <linux/ion.h>
+#endif
 #include <linux/kmemleak.h>
+#include <linux/swiotlb.h>
 #include <asm/cacheflush.h>
 #include <media/videobuf2-memops.h>
 #include <media/videobuf2-dma-sg.h>
+#if IS_ENABLED(CONFIG_DMABUF_HEAPS)
+#include <linux/dma-heap.h>
+#endif
 
 #include "is-core.h"
 #include "is-cmd.h"
@@ -138,7 +147,7 @@ static inline ulong is_vb2_dma_sg_plane_kmap(
 	struct dma_buf *dbuf;
 	u32 adj_plane = plane;
 
-	if (IS_ENABLED(CONFIG_DMA_BUF_CONTAINER) && vbuf->num_merged_dbufs) {
+	if (IS_ENABLED(DMABUF_CONTAINER) && vbuf->num_merged_dbufs) {
 		/* Is a non-image plane? */
 		if (plane >= num_i_planes)
 			adj_plane = (vbuf->num_merged_dbufs * num_i_planes)
@@ -151,8 +160,7 @@ static inline ulong is_vb2_dma_sg_plane_kmap(
 		return vbuf->kva[adj_plane];
 
 	/* Use a dma_buf extracted from the DMA buffer container or original one. */
-	if (IS_ENABLED(CONFIG_DMA_BUF_CONTAINER)
-		&& vbuf->num_merged_dbufs && (plane < num_i_planes))
+	if (IS_ENABLED(DMABUF_CONTAINER) && vbuf->num_merged_dbufs && (plane < num_i_planes))
 		dbuf = vbuf->dbuf[adj_plane];
 	else
 		dbuf = dma_buf_get(vb->planes[plane].m.fd);
@@ -197,8 +205,8 @@ static inline void is_vb2_dma_sg_plane_kunmap(
 	struct dma_buf *dbuf;
 	u32 adj_plane = plane;
 
-	if (IS_ENABLED(CONFIG_DMA_BUF_CONTAINER) && vbuf->num_merged_dbufs) {
-		if ((plane - num_i_planes) >= 0)
+	if (IS_ENABLED(DMABUF_CONTAINER) && vbuf->num_merged_dbufs) {
+		if (plane >= num_i_planes)
 			adj_plane = (vbuf->num_merged_dbufs * num_i_planes)
 				+ (plane - num_i_planes);
 		else
@@ -285,7 +293,7 @@ void is_vb2_dma_sg_unremap_attr(struct is_vb2_buf *vbuf, int attr)
 	atomic_inc(&stats.cnt_buf_unremap);
 }
 
-#if IS_ENABLED(CONFIG_DMA_BUF_CONTAINER)
+#if IS_ENABLED(DMABUF_CONTAINER)
 static long is_dbufcon_prepare(struct is_vb2_buf *vbuf, struct device *dev)
 {
 	struct vb2_buffer *vb = &vbuf->vb.vb2_buf;
@@ -638,9 +646,14 @@ static void is_dbufcon_kunmap(struct is_vb2_buf *vbuf, u32 plane)
 	atomic_inc(&stats.cnt_dbuf_kunmap);
 }
 
-static int _is_dbufcon_get_count(struct dma_buf *dbufcon)
+static int __is_dbufcon_get_count(struct dma_buf *dbufcon)
 {
 	return dmabuf_container_get_count(dbufcon);
+}
+
+static struct dma_buf *__dmabuf_container_get_buffer(struct dma_buf *dbuf, int idx)
+{
+	return dmabuf_container_get_buffer(dbuf, idx);
 }
 #else
 static long is_dbufcon_prepare(struct is_vb2_buf *vbuf, struct device *dev)
@@ -669,14 +682,18 @@ static void is_dbufcon_kunmap(struct is_vb2_buf *vbuf, u32 plane)
 {
 }
 
-static int _is_dbufcon_get_count(struct dma_buf *dbufcon)
+static int __is_dbufcon_get_count(struct dma_buf *dbufcon)
 {
 	/* It's not dma_buf_containter FD */
 	return -1;
 }
-#endif
 
-#ifdef ENABLE_LOGICAL_VIDEO_NODE
+static struct dma_buf *__dmabuf_container_get_buffer(struct dma_buf *dbuf, int idx)
+{
+	return NULL;
+}
+#endif /* DMABUF_CONTAINER */
+
 void is_subbuf_prepare(struct is_sub_dma_buf *buf, struct v4l2_plane *plane,
 		struct device *dev)
 {
@@ -695,7 +712,7 @@ void is_subbuf_prepare(struct is_sub_dma_buf *buf, struct v4l2_plane *plane,
 			goto err_get_dbufcon;
 		}
 
-		cnt = _is_dbufcon_get_count(dbuf);
+		cnt = __is_dbufcon_get_count(dbuf);
 		if (cnt < 0) {
 			is_dbufcon = false;
 			cnt = 1;
@@ -713,9 +730,11 @@ void is_subbuf_prepare(struct is_sub_dma_buf *buf, struct v4l2_plane *plane,
 		}
 
 		for (b = 0, i = p; b < cnt; b++, i = (num_p * b) + p) {
-			buf->dbuf[i] = is_dbufcon ?
-				dmabuf_container_get_buffer(dbuf, b) :
-				dma_buf_get(plane[i].m.fd);
+			if (IS_ENABLED(DMABUF_CONTAINER) && is_dbufcon)
+				buf->dbuf[i] = __dmabuf_container_get_buffer(dbuf, b);
+			else
+				buf->dbuf[i] = dma_buf_get(plane[i].m.fd);
+
 			if (IS_ERR_OR_NULL(buf->dbuf[i])) {
 				err("[V%d][P%d]Failed to get dmabuf. fd %d ret %ld",
 					buf->vid, i,
@@ -884,7 +903,6 @@ void is_subbuf_finish(struct is_sub_dma_buf *buf)
 
 	atomic_inc(&stats.cnt_subbuf_finish);
 }
-#endif
 
 const struct is_vb2_buf_ops is_vb2_buf_ops_dma_sg = {
 	.plane_kvaddr		= is_vb2_dma_sg_plane_kvaddr,
@@ -899,22 +917,17 @@ const struct is_vb2_buf_ops is_vb2_buf_ops_dma_sg = {
 	.dbufcon_unmap		= is_dbufcon_unmap,
 	.dbufcon_kmap		= is_dbufcon_kmap,
 	.dbufcon_kunmap		= is_dbufcon_kunmap,
-#ifdef ENABLE_LOGICAL_VIDEO_NODE
 	.subbuf_prepare		= is_subbuf_prepare,
 	.subbuf_dvmap		= is_subbuf_dvmap,
 	.subbuf_kvmap		= is_subbuf_kvmap,
 	.subbuf_kunmap		= is_subbuf_kunmap,
 	.subbuf_finish		= is_subbuf_finish
-#endif
 };
+#endif /* CONFIG_VIDEOBUF2_DMA_SG */
 
-/* is private buffer operations */
-static void is_ion_free(struct is_priv_buf *pbuf)
+#if IS_ENABLED(CONFIG_DMA_SHARED_BUFFER)
+static void dma_buf_free(struct is_priv_buf *pbuf)
 {
-	struct is_ion_ctx *alloc_ctx;
-
-	alloc_ctx = pbuf->ctx;
-
 	if (pbuf->kva)
 		dma_buf_vunmap(pbuf->dma_buf, pbuf->kva);
 
@@ -929,7 +942,7 @@ static void is_ion_free(struct is_priv_buf *pbuf)
 	vfree(pbuf);
 }
 
-static ulong is_ion_kvaddr(struct is_priv_buf *pbuf)
+static ulong dma_buf_kvaddr(struct is_priv_buf *pbuf)
 {
 	if (!pbuf)
 		return 0;
@@ -939,121 +952,135 @@ static ulong is_ion_kvaddr(struct is_priv_buf *pbuf)
 
 	return (ulong)pbuf->kva;
 }
+#endif /* CONFIG_DMA_SHARED_BUFFER */
 
-static dma_addr_t is_ion_dvaddr(struct is_priv_buf *pbuf)
+static dma_addr_t mem_dvaddr(struct is_priv_buf *pbuf)
 {
-	dma_addr_t dva = 0;
-
 	if (!pbuf)
-		return -EINVAL;
+		return 0;
 
-	if (pbuf->iova == 0)
-		return -EINVAL;
-
-	dva = pbuf->iova;
-
-	return (ulong)dva;
+	return (dma_addr_t)pbuf->iova;
 }
 
 /* The physical address can only be supported when using reserved memory. */
-static phys_addr_t is_ion_phaddr(struct is_priv_buf *pbuf)
+static phys_addr_t mem_phaddr(struct is_priv_buf *pbuf)
 {
-	dma_addr_t phya = 0;
-
-	phya = sg_phys(pbuf->sgt->sgl);
-
-	return (phys_addr_t)phya;
+	return (phys_addr_t)sg_phys(pbuf->sgt->sgl);
 }
 
-static void _is_ion_sync_for_xxx(struct is_priv_buf *pbuf,
-		off_t offset, size_t size, enum dma_data_direction dir, enum is_cache_ops ops)
+static void mem_sync(struct is_priv_buf *pbuf, off_t offset, size_t size,
+		struct device *dev, enum dma_data_direction dir, enum dma_sync_target target)
 {
 	int i;
 	struct scatterlist *sg;
 	ulong size_offset = 0;
 	size_t remained_size = size;
+	ulong actual_offset;
+	size_t actual_size;
 
-	if (pbuf->kva) {
-		FIMC_BUG_VOID((offset < 0) || (offset > pbuf->size));
-		FIMC_BUG_VOID((offset + size) < size);
-		FIMC_BUG_VOID((size > pbuf->size) || ((offset + size) > pbuf->size));
+	if (!pbuf->kva)
+		return;
 
-		dbg_mem(1, "sync_for_%s start (iova:%x, offset:%d, size:%d, total_len:%d)",
-				ops == IS_SYNC_FOR_DEVICE ? "device" : "cpu", pbuf->iova,
-				offset, size, sg_dma_len(pbuf->sgt->sgl));
-		for_each_sg(pbuf->sgt->sgl, sg, pbuf->sgt->orig_nents, i) {
-			dbg_mem(2, "[I:%d] size_offset: %d, sg->length:%d", i, size_offset, sg->length);
-			if (size_offset + sg->length >= offset) {
-				ulong actual_offset;
-				size_t actual_size;
-
-				/* If offset starts inside the sg region,
-				 * start region of cache process is offset.
-				 * Else, start region of cache process is sg start point
-				 */
-				actual_offset = (size_offset <= offset) ? offset : size_offset;
-
-				/* Case 1: cache region is in sg region
-				 * Case 2: cache region start in sg region, but size is out of region
-				 * Case 3: cache region is larger than sg region or same
-				 */
-				if (offset + size < size_offset + sg->length)
-					actual_size = remained_size;
-				else if (offset + size >= size_offset + sg->length && actual_offset == offset)
-					actual_size = sg->length - (offset - size_offset);
-				else
-					actual_size = sg->length;
-
-				remained_size -= actual_size;
-
-				if (actual_size > sg->length) {
-					warn("%s, actual_size %d > sg->length %d", __func__, actual_size, sg->length);
-					actual_offset = size_offset;
-					actual_size = sg->length;
-				}
-
-				dbg_mem(2, "[I:%d] do cache ops(actual_offset:%d, actual_size:%d)",
-						i, actual_offset, actual_size);
-				if (ops == IS_SYNC_FOR_DEVICE) {
-					dma_sync_single_for_device(is_dev,
-							pbuf->iova + actual_offset, actual_size, dir);
-				} else {
-					dma_sync_single_for_cpu(is_dev,
-							pbuf->iova + actual_offset, actual_size, dir);
-				}
-			}
-			size_offset += sg->length;
-			if (size_offset >= offset + size)
-				break;
-		}
-		dbg_mem(1, "sync_for_%s end", ops == IS_SYNC_FOR_DEVICE ? "device" : "cpu");
+	if ((offset < 0) || (offset > pbuf->size)) {
+		warn("%s, invalid offset: %ld", __func__, offset);
+		return;
 	}
+
+	if ((size > pbuf->size) || ((offset + size) > pbuf->size)) {
+		warn("%s, invalid size: %zu or offset: %ld", __func__, size, offset);
+		return;
+	}
+
+	dbg_mem(1, "%s_for_%s begin (dva: %pad, offset: %ld, size: %zu, sg_dma_len:%d)",
+			__func__, target == SYNC_FOR_DEVICE ? "device" : "cpu",
+			&pbuf->iova, offset, size, sg_dma_len(pbuf->sgt->sgl));
+
+	for_each_sg(pbuf->sgt->sgl, sg, pbuf->sgt->orig_nents, i) {
+		dbg_mem(2, "[I:%d] size_offset: %d, sg->length:%d",
+					i, size_offset, sg->length);
+
+		if (size_offset + sg->length >= offset) {
+			/* If offset starts inside the sg region,
+			 * start region of cache process is offset.
+			 * Else, start region of cache process is sg start point
+			 */
+			actual_offset = (size_offset <= offset) ? offset : size_offset;
+
+			/* Case 1: cache region is in sg region
+			 * Case 2: cache region start in sg region, but size is out of region
+			 * Case 3: cache region is larger than sg region or same
+			 */
+			if (offset + size < size_offset + sg->length)
+				actual_size = remained_size;
+			else if (offset + size >= size_offset + sg->length
+					&& actual_offset == offset)
+				actual_size = sg->length - (offset - size_offset);
+			else
+				actual_size = sg->length;
+
+			remained_size -= actual_size;
+
+			if (actual_size > sg->length) {
+				warn("%s, actual_size %d > sg->length %d", __func__,
+								actual_size, sg->length);
+				actual_offset = size_offset;
+				actual_size = sg->length;
+			}
+
+			dbg_mem(2, "[I:%d] do cache ops(actual_offset:%d, actual_size:%d)",
+					i, actual_offset, actual_size);
+
+			if (target == SYNC_FOR_DEVICE)
+				dma_sync_single_for_device(dev, pbuf->iova + actual_offset,
+									actual_size, dir);
+			else
+				dma_sync_single_for_cpu(dev, pbuf->iova + actual_offset,
+									actual_size, dir);
+		}
+
+		size_offset += sg->length;
+		if (size_offset >= offset + size)
+			break;
+	}
+
+	dbg_mem(1, "%s_for_%s end", __func__, target == SYNC_FOR_DEVICE ? "device" : "cpu");
 }
 
+
+#if IS_ENABLED(CONFIG_ION)
+/* is private buffer operations for 'ION' */
 static void is_ion_sync_for_device(struct is_priv_buf *pbuf,
 		off_t offset, size_t size, enum dma_data_direction dir)
 {
-	FIMC_BUG_VOID(!pbuf);
-	_is_ion_sync_for_xxx(pbuf, offset, size, dir, IS_SYNC_FOR_DEVICE);
+	struct is_ion_ctx *iic;
+
+	if (pbuf) {
+		iic = (struct is_ion_ctx *)(pbuf->ctx);
+		mem_sync(pbuf, offset, size, iic->dev, dir, SYNC_FOR_DEVICE);
+	}
 }
 
 static void is_ion_sync_for_cpu(struct is_priv_buf *pbuf,
 		off_t offset, size_t size, enum dma_data_direction dir)
 {
-	FIMC_BUG_VOID(!pbuf);
-	_is_ion_sync_for_xxx(pbuf, offset, size, dir, IS_SYNC_FOR_CPU);
+	struct is_ion_ctx *iic;
+
+	if (pbuf) {
+		iic = (struct is_ion_ctx *)(pbuf->ctx);
+		mem_sync(pbuf, offset, size, iic->dev, dir, SYNC_FOR_CPU);
+	}
 }
 
 const struct is_priv_buf_ops is_priv_buf_ops_ion = {
-	.free			= is_ion_free,
-	.kvaddr			= is_ion_kvaddr,
-	.dvaddr			= is_ion_dvaddr,
-	.phaddr			= is_ion_phaddr,
+	.free			= dma_buf_free,
+	.kvaddr			= dma_buf_kvaddr,
+	.dvaddr			= mem_dvaddr,
+	.phaddr			= mem_phaddr,
 	.sync_for_device	= is_ion_sync_for_device,
 	.sync_for_cpu		= is_ion_sync_for_cpu,
 };
 
-/* is memory operations */
+/* is memory operations for 'ION' */
 unsigned int is_ion_query_heapmask(const char *heap_name)
 {
 	struct ion_heap_data data[ION_NUM_MAX_HEAPS];
@@ -1089,6 +1116,8 @@ static void *is_ion_init(struct platform_device *pdev)
 	ctx->heapmask = is_ion_query_heapmask(heapname);
 	if (!ctx->heapmask)
 		ctx->heapmask = is_ion_query_heapmask("ion_system_heap");
+
+	ctx->heapmask_s = is_ion_query_heapmask("secure_camera_heap");
 
 	return ctx;
 }
@@ -1178,36 +1207,235 @@ err_attach:
 err_alloc:
 	vfree(buf);
 
-	pr_err("%s: Error occured while allocating\n", __func__);
+	pr_err("%s: Error occurred while allocating\n", __func__);
 	return ERR_PTR(ret);
 }
 
-static int is_ion_resume(void *ctx)
-{
-	return 0;
-}
-
-static void is_ion_suspend(void *ctx)
-{
-}
-
 const struct is_mem_ops is_mem_ops_ion = {
-	.init			= is_ion_init,
-	.cleanup		= is_ion_deinit,
-	.resume			= is_ion_resume,
-	.suspend		= is_ion_suspend,
-	.alloc			= is_ion_alloc,
+	.init		= is_ion_init,
+	.cleanup	= is_ion_deinit,
+	.alloc		= is_ion_alloc,
 };
+#else
+const struct is_mem_ops is_mem_ops_ion = { NULL, };
+#endif /* CONFIG_ION */
+
+#if IS_ENABLED(CONFIG_DMABUF_HEAPS)
+/* is private buffer operations for 'dmabuf heaps' */
+static void dmabuf_heap_sync_for_device(struct is_priv_buf *pbuf,
+		off_t offset, size_t size, enum dma_data_direction dir)
+{
+	struct dmabuf_heap_ctx *pdhc;
+
+	if (pbuf) {
+		pdhc = (struct dmabuf_heap_ctx *)(pbuf->ctx);
+		mem_sync(pbuf, offset, size, pdhc->dev, dir, SYNC_FOR_DEVICE);
+	}
+}
+
+static void dmabuf_heap_sync_for_cpu(struct is_priv_buf *pbuf,
+		off_t offset, size_t size, enum dma_data_direction dir)
+{
+	struct dmabuf_heap_ctx *pdhc;
+
+	if (pbuf) {
+		pdhc = (struct dmabuf_heap_ctx *)(pbuf->ctx);
+		mem_sync(pbuf, offset, size, pdhc->dev, dir, SYNC_FOR_CPU);
+	}
+}
+
+const struct is_priv_buf_ops priv_buf_ops_dmabuf_heap = {
+	.free			= dma_buf_free,
+	.kvaddr			= dma_buf_kvaddr,
+	.dvaddr			= mem_dvaddr,
+	.phaddr			= mem_phaddr,
+	.sync_for_device	= dmabuf_heap_sync_for_device,
+	.sync_for_cpu		= dmabuf_heap_sync_for_cpu,
+};
+
+/* is memory operations for 'dmabuf heaps' */
+static void *dmabuf_heap_init(struct platform_device *pdev)
+{
+	struct dmabuf_heap_ctx *pdhc;
+
+	pdhc = vzalloc(sizeof(*pdhc));
+	if (!pdhc)
+		return ERR_PTR(-ENOMEM);
+
+	pdhc->dev = &pdev->dev;
+	mutex_init(&pdhc->lock);
+
+	pdhc->dh_system = dma_heap_find("system");
+	pdhc->dh_system_uncached = dma_heap_find("system-uncached");
+	pdhc->dh_secure_camera = dma_heap_find(SECURE_HEAPNAME);
+	if (!pdhc->dh_secure_camera)
+		probe_warn("There's no secure camera reserved memory");
+
+#if defined(USE_CAMERA_HEAP)
+	pdhc->dh_camera = dma_heap_find(CAMERA_HEAP_NAME);
+	if (!pdhc->dh_camera)
+		warn("There's no camera heap");
+	pdhc->dh_camera_uncached = dma_heap_find(CAMERA_HEAP_UNCACHED_NAME);
+	if (!pdhc->dh_camera_uncached)
+		warn("There's no camera heap uncached");
 #endif
 
-/* is private buffer operations */
-static void is_km_free(struct is_priv_buf *pbuf)
-{
-	kfree(pbuf->kvaddr);
-	kfree(pbuf);
+	return pdhc;
 }
 
-static ulong is_km_kvaddr(struct is_priv_buf *pbuf)
+static void dmabuf_heap_cleanup(void *ctx)
+{
+	struct dmabuf_heap_ctx *pdhc =
+		(struct dmabuf_heap_ctx *)ctx;
+
+	mutex_destroy(&pdhc->lock);
+
+	if (pdhc->dh_system)
+		dma_heap_put(pdhc->dh_system);
+	if (pdhc->dh_system_uncached)
+		dma_heap_put(pdhc->dh_system_uncached);
+	if (pdhc->dh_secure_camera)
+		dma_heap_put(pdhc->dh_secure_camera);
+#if defined(USE_CAMERA_HEAP)
+	if (pdhc->dh_camera)
+		dma_heap_put(pdhc->dh_camera);
+	if (pdhc->dh_camera_uncached)
+		dma_heap_put(pdhc->dh_camera_uncached);
+#endif
+
+	vfree(pdhc);
+}
+
+static struct dma_heap *dmabuf_heap_find(void *ctx, const char *heapname)
+{
+	struct dmabuf_heap_ctx *pdhc = (struct dmabuf_heap_ctx *)ctx;
+
+	if (!strncmp(heapname, "system", 6))
+		return pdhc->dh_system;
+	else if (!strncmp(heapname, "system-uncached", 15))
+		return pdhc->dh_system_uncached;
+	else if (!strncmp(heapname, SECURE_HEAPNAME, 20))
+		return pdhc->dh_secure_camera;
+#if defined(USE_CAMERA_HEAP)
+	else if (!strncmp(heapname, CAMERA_HEAP_NAME, CAMERA_HEAP_NAME_LEN))
+		return pdhc->dh_camera ? pdhc->dh_camera : pdhc->dh_system;
+	else if (!strncmp(heapname, CAMERA_HEAP_UNCACHED_NAME, CAMERA_HEAP_UNCACHED_NAME_LEN))
+		return pdhc->dh_camera_uncached ? pdhc->dh_camera_uncached : pdhc->dh_system_uncached;
+#endif
+	else
+		return NULL;
+}
+
+static struct is_priv_buf *dmabuf_heap_alloc(void *ctx,
+		size_t size, const char *heapname, unsigned int flags)
+{
+	struct dmabuf_heap_ctx *pdhc = (struct dmabuf_heap_ctx *)ctx;
+	struct dma_heap	*dh;
+	struct is_priv_buf *buf;
+	int ret;
+
+	buf = vzalloc(sizeof(*buf));
+	if (!buf)
+		return ERR_PTR(-ENOMEM);
+
+	size = PAGE_ALIGN(size);
+
+	dh = heapname && strlen(heapname) ?
+		dmabuf_heap_find(ctx, heapname) : pdhc->dh_system;
+	if (!dh)
+		return ERR_PTR(-EINVAL);
+
+#ifdef USE_CAMERA_HEAP
+	if ((pdhc->dh_camera && dh == pdhc->dh_camera) ||
+		(pdhc->dh_camera_uncached && dh == pdhc->dh_camera_uncached)) {
+		buf->dma_buf = dma_heap_buffer_alloc(dh, size, 0, 0);
+		if (IS_ERR(buf->dma_buf)) {
+			info("not enough camera heap, use system heap, size = %d\n", size);
+			if (dh == pdhc->dh_camera_uncached)
+				dh = pdhc->dh_system_uncached;
+			else
+				dh = pdhc->dh_system;
+		} else {
+			info("success to alloc camera heap, size = %d\n", size);
+			goto camera_heap_alloc_success;
+		}
+	}
+#endif
+	buf->dma_buf = dma_heap_buffer_alloc(dh, size, 0, 0);
+	if (IS_ERR(buf->dma_buf)) {
+		ret = -ENOMEM;
+		goto err_alloc;
+	}
+
+#ifdef USE_CAMERA_HEAP
+camera_heap_alloc_success:
+#endif
+	buf->attachment = dma_buf_attach(buf->dma_buf, pdhc->dev);
+	if (IS_ERR(buf->attachment)) {
+		ret = PTR_ERR(buf->attachment);
+		goto err_attach;
+	}
+
+	buf->sgt = dma_buf_map_attachment(
+				buf->attachment, DMA_BIDIRECTIONAL);
+	if (IS_ERR(buf->sgt)) {
+		ret = PTR_ERR(buf->sgt);
+		goto err_map_dmabuf;
+	}
+
+	buf->ctx = (void *)pdhc;
+	buf->size = size;
+	buf->direction = DMA_BIDIRECTIONAL;
+	buf->ops = &priv_buf_ops_dmabuf_heap;
+
+	mutex_lock(&pdhc->lock);
+	buf->iova = sg_dma_address(buf->sgt->sgl);
+	if (IS_ERR_VALUE(buf->iova)) {
+		ret = (int)buf->iova;
+		mutex_unlock(&pdhc->lock);
+		goto err_ion_map_io;
+	}
+	mutex_unlock(&pdhc->lock);
+
+	dbg_mem(1, "%s: size(%zu), flag(%x)\n", __func__, size, flags);
+	atomic_add(size, &mem_stats_sz_active);
+
+	return buf;
+
+err_ion_map_io:
+	dma_buf_unmap_attachment(buf->attachment, buf->sgt,
+				DMA_BIDIRECTIONAL);
+err_map_dmabuf:
+	dma_buf_detach(buf->dma_buf, buf->attachment);
+err_attach:
+	dma_buf_put(buf->dma_buf);
+err_alloc:
+	vfree(buf);
+
+	pr_err("%s: Error occurred while allocating\n", __func__);
+	return ERR_PTR(ret);
+}
+
+const struct is_mem_ops mem_ops_dmabuf_heap = {
+	.init		= dmabuf_heap_init,
+	.cleanup	= dmabuf_heap_cleanup,
+	.alloc		= dmabuf_heap_alloc,
+};
+#else
+const struct is_mem_ops mem_ops_dmabuf_heap = { NULL, };
+#endif /* CONFIG_DMABUF_HEAPS */
+
+/* private buffer operations for 'contig mem' */
+static void contig_free(struct is_priv_buf *pbuf)
+{
+	kfree(pbuf->kvaddr);
+	pbuf->kvaddr = NULL;
+
+	kfree(pbuf);
+	pbuf = NULL;
+}
+
+static ulong contig_kvaddr(struct is_priv_buf *pbuf)
 {
 	if (!pbuf)
 		return 0;
@@ -1215,28 +1443,23 @@ static ulong is_km_kvaddr(struct is_priv_buf *pbuf)
 	return (ulong)pbuf->kvaddr;
 }
 
-static phys_addr_t is_km_phaddr(struct is_priv_buf *pbuf)
+static phys_addr_t contig_phaddr(struct is_priv_buf *pbuf)
 {
-	phys_addr_t pa = 0;
-
 	if (!pbuf)
 		return 0;
 
-	pa = virt_to_phys(pbuf->kvaddr);
-
-	return pa;
+	return virt_to_phys(pbuf->kvaddr);
 }
 
-const struct is_priv_buf_ops is_priv_buf_ops_km = {
-	.free			= is_km_free,
-	.kvaddr			= is_km_kvaddr,
-	.phaddr			= is_km_phaddr,
+const struct is_priv_buf_ops is_priv_buf_ops_contig = {
+	.free	= contig_free,
+	.kvaddr	= contig_kvaddr,
+	.phaddr	= contig_phaddr,
 };
 
-static struct is_priv_buf *is_kmalloc(size_t size, size_t align)
+static struct is_priv_buf *contig_alloc(size_t size)
 {
-	struct is_priv_buf *buf = NULL;
-	int ret = 0;
+	struct is_priv_buf *buf;
 
 	buf = kzalloc(sizeof(*buf), GFP_KERNEL);
 	if (!buf)
@@ -1244,20 +1467,14 @@ static struct is_priv_buf *is_kmalloc(size_t size, size_t align)
 
 	buf->kvaddr = kzalloc(size, GFP_KERNEL);
 	if (!buf->kvaddr) {
-		ret = -ENOMEM;
-		goto err_priv_alloc;
+		kfree(buf);
+		return ERR_PTR(-ENOMEM);
 	}
 
 	buf->size = size;
-	buf->align = align;
-	buf->ops = &is_priv_buf_ops_km;
+	buf->ops = &is_priv_buf_ops_contig;
 
 	return buf;
-
-err_priv_alloc:
-	kfree(buf);
-
-	return ERR_PTR(ret);
 }
 
 void is_vfree_atomic(const void *addr)
@@ -1266,7 +1483,7 @@ void is_vfree_atomic(const void *addr)
 	 * Use raw_cpu_ptr() because this can be called from preemptible
 	 * context. Preemption is absolutely fine here, because the llist_add()
 	 * implementation is lockless, so it works even if we are adding to
-	 * nother cpu's list.  schedule_work() should be fine with this too.
+	 * another cpu's list.  schedule_work() should be fine with this too.
 	 */
 	struct is_vfree_deferred *p = raw_cpu_ptr(is_vfree_deferred);
 
@@ -1276,7 +1493,7 @@ void is_vfree_atomic(const void *addr)
 		schedule_work(&p->wq);
 }
 
-static void is_mem_init_stats(void)
+void is_mem_init_stats(void)
 {
 	atomic_set(&stats.cnt_plane_kmap, 0);
 	atomic_set(&stats.cnt_plane_kunmap, 0);
@@ -1313,33 +1530,33 @@ void is_mem_check_stats(struct is_mem *mem)
 
 
 	if (unbalanced) {
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"counters for memory OPs unbalanced!\n");
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"\tplane_kmap: %ld, plane_kunmap: %ld\n",
 			atomic_read(&mem->stats->cnt_plane_kmap),
 			atomic_read(&mem->stats->cnt_plane_kunmap));
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"\tbuf_remap: %ld, buf_unremap: %ld\n",
 			atomic_read(&mem->stats->cnt_buf_remap),
 			atomic_read(&mem->stats->cnt_buf_unremap));
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"\tdbuf_prepare: %ld, dbuf_finish: %ld\n",
 			atomic_read(&mem->stats->cnt_dbuf_prepare),
 			atomic_read(&mem->stats->cnt_dbuf_finish));
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"\tdbuf_map: %ld, dbuf_unmap: %ld\n",
 			atomic_read(&mem->stats->cnt_dbuf_map),
 			atomic_read(&mem->stats->cnt_dbuf_unmap));
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"\tdbuf_kmap: %ld, dbuf_kunmap: %ld\n",
 			atomic_read(&mem->stats->cnt_dbuf_kmap),
 			atomic_read(&mem->stats->cnt_dbuf_kunmap));
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"\tsubbuf_prepare: %ld, subbuf_finish: %ld\n",
 			atomic_read(&mem->stats->cnt_subbuf_prepare),
 			atomic_read(&mem->stats->cnt_subbuf_finish));
-		dev_err(mem->default_ctx->dev,
+		dev_err(mem->dev,
 			"\tsubbuf_kvmap: %ld, subbuf_kunmap: %ld\n",
 			atomic_read(&mem->stats->cnt_subbuf_kvmap),
 			atomic_read(&mem->stats->cnt_subbuf_kunmap));
@@ -1351,20 +1568,28 @@ void is_mem_check_stats(struct is_mem *mem)
 int is_mem_init(struct is_mem *mem, struct platform_device *pdev)
 {
 	int i;
-#if IS_ENABLED(CONFIG_VIDEOBUF2_DMA_SG)
-	mem->is_mem_ops = &is_mem_ops_ion;
-	mem->vb2_mem_ops = &vb2_dma_sg_memops;
-	mem->is_vb2_buf_ops = &is_vb2_buf_ops_dma_sg;
-	mem->kmalloc = &is_kmalloc;
-#endif
 
-	mem->default_ctx = CALL_PTR_MEMOP(mem, init, pdev);
-	if (IS_ERR_OR_NULL(mem->default_ctx)) {
-		if (IS_ERR(mem->default_ctx))
-			return PTR_ERR(mem->default_ctx);
-		else
-			return -EINVAL;
+	mem->dev = &pdev->dev;
+	mem->stats = &stats;
+
+	if (IS_ENABLED(CONFIG_VIDEOBUF2_DMA_SG)) {
+		mem->vb2_mem_ops = &vb2_dma_sg_memops;
+		mem->is_vb2_buf_ops = &is_vb2_buf_ops_dma_sg;
 	}
+
+	if (IS_ENABLED(CONFIG_DMABUF_HEAPS)) {
+		mem->is_mem_ops = &mem_ops_dmabuf_heap;
+		mem->priv = CALL_PTR_MEMOP(mem, init, pdev);
+		if (IS_ERR(mem->priv))
+			return PTR_ERR(mem->priv);
+	} else if (IS_ENABLED(CONFIG_ION)) {
+		mem->is_mem_ops = &is_mem_ops_ion;
+		mem->priv = CALL_PTR_MEMOP(mem, init, pdev);
+		if (IS_ERR(mem->priv))
+			return PTR_ERR(mem->priv);
+	}
+
+	mem->contig_alloc = &contig_alloc;
 
 	is_vfree_deferred = alloc_percpu(struct is_vfree_deferred);
 	for_each_possible_cpu(i) {
@@ -1374,10 +1599,6 @@ int is_mem_init(struct is_mem *mem, struct platform_device *pdev)
 		init_llist_head(&p->list);
 		INIT_WORK(&p->wq, is_free_work);
 	}
-
-	mem->stats = &stats;
-
-	is_mem_init_stats();
 
 	return 0;
 }

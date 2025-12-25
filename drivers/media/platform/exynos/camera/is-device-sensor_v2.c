@@ -4050,7 +4050,7 @@ int is_sensor_runtime_suspend(struct device *dev)
 	if (ret)
 		err("is_sensor_runtime_suspend_pre is fail(%d)", ret);
 
-	CALL_MEMOP(&device->mem, suspend, device->mem.default_ctx);
+	//CALL_MEMOP(&device->mem, suspend, device->mem.default_ctx);
 
 	subdev_csi = device->subdev_csi;
 	if (!subdev_csi)
@@ -4195,7 +4195,7 @@ int is_sensor_runtime_resume(struct device *dev)
 		goto p_err;
 	}
 
-	CALL_MEMOP(&device->mem, resume, device->mem.default_ctx);
+	//CALL_MEMOP(&device->mem, resume, device->mem.default_ctx);
 
 p_err:
 	minfo("[SS%d:D] %s():%d\n", device, device->device_id, __func__, ret);

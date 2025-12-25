@@ -1904,9 +1904,9 @@ int is_queue_buffer_prepare(struct vb2_buffer *vb)
 
 	if (video->type == IS_VIDEO_TYPE_LEADER
 		&& queue->mode == CAMERA_NODE_LOGICAL) {
-		ctx = video->resourcemgr->mem.default_ctx;
+		//ctx = video->resourcemgr->mem.default_ctx;
 
-		ret = _is_queue_subbuf_prepare(ctx->dev, vbuf,
+		ret = _is_queue_subbuf_prepare(video->alloc_dev, vbuf,
 				&frame->shot_ext->node_group, need_vmap);
 		if (ret) {
 			mverr("[%s][I%d]Failed to subbuf_prepare", vctx, video,
@@ -2158,7 +2158,8 @@ int is_video_probe(struct is_video *video,
 	video->id		= video_number;
 	video->vb2_mem_ops	= mem->vb2_mem_ops;
 	video->is_vb2_buf_ops	= mem->is_vb2_buf_ops;
-	video->alloc_ctx	= mem->default_ctx;
+	video->alloc_ctx	= mem->priv;
+	video->alloc_dev	= mem->dev;
 	video->type		= (vfl_dir == VFL_DIR_RX) ? IS_VIDEO_TYPE_CAPTURE : IS_VIDEO_TYPE_LEADER;
 	video->vd.vfl_dir	= vfl_dir;
 	video->vd.v4l2_dev	= v4l2_dev;

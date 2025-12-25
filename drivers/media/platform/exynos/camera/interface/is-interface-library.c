@@ -635,7 +635,7 @@ static void __maybe_unused *is_alloc_dma_pb(u32 size)
 		return NULL;
 	}
 
-	pb = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, size, NULL, 0);
+	pb = CALL_PTR_MEMOP(mem, alloc, mem->priv, size, NULL, 0);
 	if (IS_ERR_OR_NULL(pb)) {
 		err_lib("failed to allocate a private buffer");
 		kfree(buf);

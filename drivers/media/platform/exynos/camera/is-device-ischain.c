@@ -1547,9 +1547,6 @@ static int is_itf_g_capability(struct is_device_ischain *this)
 	struct camera2_sm *capability;
 #endif
 
-	ret = is_hw_g_capability(this->interface, this->instance,
-		(u32)(this->kvaddr_shared - this->minfo->kvaddr));
-
 	is_ischain_region_invalid(this);
 
 #ifdef PRINT_CAPABILITY
@@ -1778,7 +1775,7 @@ int is_ischain_runtime_suspend(struct device *dev)
 
 	info("FIMC_IS runtime suspend in\n");
 
-	CALL_MEMOP(mem, suspend, mem->default_ctx);
+	//CALL_MEMOP(mem, suspend, mem->default_ctx);
 
 #if IS_ENABLED(CONFIG_PCI_EXYNOS)
 	exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_CAMERA);
@@ -1980,7 +1977,7 @@ int is_ischain_runtime_resume(struct device *dev)
 		goto p_err;
 	}
 
-	CALL_MEMOP(mem, resume, mem->default_ctx);
+	//CALL_MEMOP(mem, resume, mem->default_ctx);
 
 #if IS_ENABLED(CONFIG_PCI_EXYNOS)
 	exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_CAMERA);
@@ -2834,10 +2831,6 @@ static int is_ischain_open(struct is_device_ischain *device)
 
 	offset_region = device->instance * PARAM_REGION_SIZE;
 	device->is_region	= (struct is_region *)(minfo->kvaddr_region + offset_region);
-
-	device->kvaddr_shared	= device->is_region->shared[0];
-	device->dvaddr_shared	= minfo->dvaddr +
-				(u32)((ulong)&device->is_region->shared[0] - minfo->kvaddr);
 
 	spin_lock_init(&device->is_region->fd_info_slock);
 

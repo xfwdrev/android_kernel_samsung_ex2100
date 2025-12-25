@@ -507,12 +507,13 @@ static void __is_fault_handler(struct device *dev)
 
 	/* ETC */
 	print_all_hw_frame_count(&core->hardware);
-	is_hw_fault(&core->interface);
-	/* dump FW page table 1nd(~16KB), 2nd(16KB~32KB) */
+	/*is_hw_fault(&core->interface);
+	// dump FW page table 1nd(~16KB), 2nd(16KB~32KB)
 	is_hw_memdump(&core->interface,
-		resourcemgr->minfo.kvaddr + TTB_OFFSET, /* TTB_BASE ~ 32KB */
+		resourcemgr->minfo.kvaddr + TTB_OFFSET, // TTB_BASE ~ 32KB
 		resourcemgr->minfo.kvaddr + TTB_OFFSET + TTB_SIZE);
 	is_hw_logdump(&core->interface);
+	*/
 
 	is_debug_s2d(true, "SYSMMU PAGE FAULT");
 }

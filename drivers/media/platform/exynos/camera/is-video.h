@@ -563,6 +563,7 @@ struct is_video {
 	const struct vb2_mem_ops	*vb2_mem_ops;
 	const struct is_vb2_buf_ops *is_vb2_buf_ops;
 	void				*alloc_ctx;
+	void				*alloc_dev;
 
 	struct semaphore		smp_multi_input;
 	bool				try_smp;
