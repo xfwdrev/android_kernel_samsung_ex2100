@@ -633,26 +633,17 @@ static int mfc_core_probe(struct platform_device *pdev)
 
 	/* vOTF 1:1 mapping */
 	core->domain = iommu_get_domain_for_dev(core->device);
-	if (core->core_pdata->gdc_votf_base) {
-		ret = mfc_map_votf_sfr(core, core->core_pdata->gdc_votf_base);
+	if (core->core_pdata->gdc_votf_base || core->core_pdata->dpu_votf_base) {
+		ret = mfc_iommu_map_sfr(core);
 		if (ret) {
-			core->has_gdc_votf = 0;
-			dev_err(&pdev->dev, "failed to map GDC vOTF SFR\n");
-			goto err_gdc_votf;
-		} else {
-			core->has_gdc_votf = 1;
+			dev_err(&pdev->dev, "failed to map vOTF SFR\n");
+			goto err_alloc_debug;
 		}
 	}
-	if (core->core_pdata->dpu_votf_base) {
-		ret = mfc_map_votf_sfr(core, core->core_pdata->dpu_votf_base);
-		if (ret) {
-			core->has_dpu_votf = 0;
-			dev_err(&pdev->dev, "failed to map DPU vOTF SFR\n");
-			goto err_dpu_votf;
-		} else {
-			core->has_dpu_votf = 1;
-		}
-	}
+
+	ret = mfc_alloc_firmware(core);
+	if (!ret)
+		core->fw.status = 1;
 
 	core->logging_data = devm_kzalloc(&pdev->dev, sizeof(struct mfc_debug),
 			GFP_KERNEL);
@@ -680,12 +671,6 @@ static int mfc_core_probe(struct platform_device *pdev)
 	return 0;
 
 err_alloc_debug:
-	if (core->has_dpu_votf)
-		mfc_unmap_votf_sfr(core, core->core_pdata->dpu_votf_base);
-err_dpu_votf:
-	if (core->has_gdc_votf)
-		mfc_unmap_votf_sfr(core, core->core_pdata->gdc_votf_base);
-err_gdc_votf:
 	iommu_unregister_device_fault_handler(&pdev->dev);
 err_sysmmu_fault_handler:
 	destroy_workqueue(core->butler_wq);
