@@ -5028,20 +5028,20 @@ static int decon_fb_alloc_memory(struct decon_device *decon, struct decon_win *w
 	// 	goto err_share_dma_buf;
 	// }
 
-	  dev_info(decon->dev, "want %u bytes for window[%d]\n", size, win->idx);
+	dev_info(decon->dev, "want %u bytes for window[%d]\n", size, win->idx);
 
-		dma_heap = dma_heap_find("system-uncached");
-		if (dma_heap) {
-			buf = dma_heap_buffer_alloc(dma_heap, (size_t)size, 0, 0);
-			dma_heap_put(dma_heap);
-		} else {
-			pr_err("dma_heap_find() failed\n");
-			goto err_share_dma_buf;
-		}
-		if (IS_ERR(buf)) {
-			dev_err(dsim->dev, "ion_alloc() failed\n");
-			goto err_share_dma_buf;
-		}
+	dma_heap = dma_heap_find("system-uncached");
+	if (dma_heap) {
+		buf = dma_heap_buffer_alloc(dma_heap, (size_t)size, 0, 0);
+		dma_heap_put(dma_heap);
+	} else {
+		pr_err("dma_heap_find() failed\n");
+		goto err_share_dma_buf;
+	}
+	if (IS_ERR(buf)) {
+		dev_err(dsim->dev, "ion_alloc() failed\n");
+		goto err_share_dma_buf;
+	}
 
 
 	vaddr = dma_buf_vmap(buf);
