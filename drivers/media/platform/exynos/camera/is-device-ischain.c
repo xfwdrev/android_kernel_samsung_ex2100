@@ -927,68 +927,133 @@ void is_ischain_savefirm(struct is_device_ischain *this)
 }
 
 #if !defined(DISABLE_SETFILE)
-static int is_ischain_loadsetf(struct is_device_ischain *device,
-	struct is_vender *vender,
-	ulong load_addr)
+static int is_ischain_open_setfile(struct is_device_ischain *device,
+	struct is_vender *vender)
 {
-	int ret = 0;
-	void *address;
-	struct is_binary bin;
-	struct is_device_sensor *sensor;
+	int ret;
+	const struct firmware *setfile = NULL;
+	struct is_device_sensor *ids = device->sensor;
+	u32 position = ids->position;
+	struct is_resourcemgr *rscmgr = device->resourcemgr;
+	struct is_mem *mem = &rscmgr->mem;
+	struct is_minfo *im = &rscmgr->minfo;
 	struct is_module_enum *module;
-	int position;
+	ktime_t time_to_ready;
 
 	mdbgd_ischain("%s\n", device, __func__);
-
-	if (IS_ERR_OR_NULL(device->sensor)) {
-		merr("sensor device is NULL", device);
-		ret = -EINVAL;
-		goto out;
-	}
 
 	if (test_bit(IS_ISCHAIN_OFFLINE_REPROCESSING, &device->state)) {
 		module = device->module_enum;
 		goto skip_get_module;
 	}
 
-	sensor = device->sensor;
-	ret = is_sensor_g_module(sensor, &module);
+	ret = is_sensor_g_module(ids, &module);
 	if (ret) {
 		merr("is_sensor_g_module is fail(%d)", device, ret);
-		goto out;
+		return ret;
 	}
 
 skip_get_module:
-	position = device->sensor->position;
-	setup_binary_loader(&bin, 3, -EAGAIN, NULL, NULL);
-	ret = request_binary(&bin, IS_SETFILE_SDCARD_PATH,
-				module->setfile_name, &device->pdev->dev);
-	if (ret) {
-		merr("request_binary is fail(%d)", device, ret);
-		goto out;
+	time_to_ready = ktime_get();
+
+	/* a module has pinned setfile */
+	if (!im->pb_setfile[position]) {
+		/* a module has preloaded setfile */
+		if (module->setfile_pb) {
+			im->pb_setfile[position] = module->setfile_pb;
+			im->kvaddr_setfile[position] = module->setfile_kva;
+			carve_binary_version(IS_BIN_SETFILE, position, (void *)module->setfile_kva);
+			im->pinned_setfile[position] = module->setfile_pinned;
+			im->name_setfile[position] = module->setfile_name;
+			if (!im->pinned_setfile[position])
+				refcount_set(&im->refcount_setfile[position], 1);
+
+			minfo("preloaded(%ldus) %s is ready to use, size: 0x%zx(0x%zx)\n", device,
+							PABLO_KTIME_US_DELTA_NOW(time_to_ready),
+							module->setfile_name,
+							module->setfile_pb->size);
+
+		} else {
+			ret = request_firmware(&setfile, module->setfile_name, &device->pdev->dev);
+			if (ret) {
+				merr("failed to get %s(%d)", device, module->setfile_name, ret);
+				return ret;
+			}
+
+			im->pb_setfile[position] = CALL_PTR_MEMOP(mem, alloc, mem->priv,
+									setfile->size, NULL, 0);
+			if (IS_ERR(im->pb_setfile[position])) {
+				err("failed to allocate buffer for %s, size: 0x%zx",
+						module->setfile_name, setfile->size);
+				im->pb_setfile[position] = NULL;
+				release_firmware(setfile);
+
+				return -ENOMEM;
+			}
+
+			im->total_size += im->pb_setfile[position]->size;
+			minfo("[MEM] allocation for %s, size: 0x%zx\n", device, module->setfile_name,
+									im->pb_setfile[position]->size);
+
+			im->kvaddr_setfile[position] = CALL_BUFOP(im->pb_setfile[position], kvaddr,
+									im->pb_setfile[position]);
+			memcpy((void *)im->kvaddr_setfile[position], setfile->data, setfile->size);
+			carve_binary_version(IS_BIN_SETFILE, position, setfile->data, setfile->size);
+			im->pinned_setfile[position] = module->setfile_pinned;
+			im->name_setfile[position] = module->setfile_name;
+			if (!im->pinned_setfile[position])
+				refcount_set(&im->refcount_setfile[position], 1);
+
+			minfo("reloaded(%ldus) %s is ready to use, size: 0x%zx(0x%zx)\n", device,
+							PABLO_KTIME_US_DELTA_NOW(time_to_ready),
+							im->name_setfile[position],
+							im->pb_setfile[position]->size,
+							setfile->size);
+
+			release_firmware(setfile);
+		}
+	} else {
+		if (!im->pinned_setfile[position])
+			refcount_inc(&im->refcount_setfile[position]);
+
+		minfo("pinned(%ldus) %s is ready to use, size: 0x%zx\n", device,
+					PABLO_KTIME_US_DELTA_NOW(time_to_ready),
+					im->name_setfile[position],
+					im->pb_setfile[position]->size);
 	}
 
-	if (IS_SETFILE_SIZE < bin.size) {
-		merr("setfile size error!! IS_SETFILE_SIZE(0x%x) "
-			"is less than binary size(0x%x)",
-			device, IS_SETFILE_SIZE, bin.size);
-		ret = -EINVAL;
-		goto err_setfile_size;
+	return 0;
+}
+
+static void is_ischain_close_setfile(struct is_device_ischain *device)
+{
+	struct is_device_sensor *ids = device->sensor;
+	u32 position = ids->position;
+	struct is_minfo *im = &device->resourcemgr->minfo;
+	struct is_priv_buf *ipb = im->pb_setfile[position];
+	bool pinned = im->pinned_setfile[position];
+	struct is_module_enum *module;
+
+	mdbgd_ischain("%s\n", device, __func__);
+
+	if (!pinned && test_bit(IS_ISCHAIN_INIT, &device->state) &&
+			refcount_dec_and_test(&im->refcount_setfile[position]) &&
+			ipb) {
+		minfo("[MEM] free %s, size: 0x%zx\n", device, im->name_setfile[position],
+										ipb->size);
+
+		im->total_size -= ipb->size;
+		CALL_VOID_BUFOP(ipb, free, ipb);
+		im->pb_setfile[position] = NULL;
+		im->kvaddr_setfile[position] = 0UL;
+		im->name_setfile[position] = NULL;
 	}
 
-	address = (void *)(device->minfo->kvaddr + load_addr);
-	memcpy((void *)address, bin.data, bin.size);
-	is_ischain_cache_flush(device, load_addr, bin.size + 1);
-	carve_binary_version(IS_BIN_SETFILE, position, &bin);
-err_setfile_size:
-	release_binary(&bin);
-out:
-	if (ret)
-		merr("setfile loading is fail", device);
-	else
-		minfo("Camera: the Setfile were applied successfully.\n", device);
-
-	return ret;
+	/* release the preloaded buffer of the module also */
+	if (!pinned && !is_sensor_g_module(ids, &module) && module->setfile_pb) {
+		module->setfile_pb = NULL;
+		module->setfile_kva = 0UL;
+	}
 }
 #endif
 
@@ -1313,28 +1378,16 @@ static int is_itf_setfile(struct is_device_ischain *device,
 
 	mutex_lock(&setf_lock);
 
-	ret = is_itf_setaddr_wrap(itf, device, &setfile_addr);
-	if (ret) {
-		merr("is_hw_saddr is fail(%d)", device, ret);
-		goto p_err;
-	}
-
 #if !defined(DISABLE_SETFILE)
-	if (!setfile_addr) {
-		merr("setfile address is NULL", device);
-		goto p_err;
-	}
-
-	mdbgd_ischain("%s(0x%08lX)\n", device, __func__, setfile_addr);
-
-	ret = is_ischain_loadsetf(device, vender, setfile_addr);
+	ret = is_ischain_open_setfile(device, vender);
 	if (ret) {
 		merr("is_ischain_loadsetf is fail(%d)", device, ret);
 		goto p_err;
 	}
 #endif
 
-	ret = is_itf_setfile_wrap(itf, (device->minfo->kvaddr + setfile_addr), device);
+	setfile_addr = device->resourcemgr->minfo.kvaddr_setfile[position];
+	ret = is_itf_setfile_wrap(itf, setfile_addr, device);
 	if (ret)
 		goto p_err;
 

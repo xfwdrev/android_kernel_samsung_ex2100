@@ -314,6 +314,8 @@ struct is_module_enum {
 	char						*sensor_maker;
 	char						*sensor_name;
 	char						*setfile_name;
+	struct is_priv_buf			*setfile_pb;
+	unsigned long				setfile_kva;
 	struct hrtimer					vsync_timer;
 	struct work_struct				vsync_work;
 	void						*private_data;

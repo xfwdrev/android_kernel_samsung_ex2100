@@ -3401,26 +3401,15 @@ int is_load_bin(void)
 
 #ifdef ENABLE_TNR
 	mblk_init(&lib->mb_dma_tnr, lib->minfo->pb_tnr, MT_TYPE_MB_DMA_TNR, "DMA_TNR");
-#if defined(SECURE_CAMERA_MEM_SHARE)
-	if (core && core->scenario == IS_SCENARIO_SECURE) {
-#if defined(SECURE_CAMERA_TNR)
-		mblk_init(&lib->mb_dma_tnr_s, lib->minfo->pb_tnr_s,
-				MT_TYPE_MB_DMA_TNR_S, "DMA_TNR_S");
-#endif
+	if (IS_ENABLED(SECURE_CAMERA_MEM_SHARE)
+			&& (core && core->scenario == IS_SCENARIO_SECURE)) {
+		if (IS_ENABLED(SECURE_CAMERA_TNR))
+			mblk_init(&lib->mb_dma_tnr_s, lib->minfo->pb_tnr_s,
+					MT_TYPE_MB_DMA_TNR_S, "DMA_TNR_S");
 	}
-#endif
 #endif
 #if (ORBMCH_DMA_SIZE > 0)
 	mblk_init(&lib->mb_dma_orbmch, lib->minfo->pb_orbmch, MT_TYPE_MB_DMA_ORBMCH, "DMA_ORB");
-#endif
-#if (CLAHE_DMA_SIZE > 0)
-	mblk_init(&lib->mb_dma_clahe, lib->minfo->pb_clahe, MT_TYPE_MB_DMA_CLAHE, "DMA_CLA");
-#endif
-
-	if (IS_ENABLED(ENABLE_VRA))
-		mblk_init(&lib->mb_vra, lib->minfo->pb_vra, MT_TYPE_MB_VRA, "VRA");
-#ifdef ENABLE_VRA_NETARRAY
-	mblk_init(&lib->mb_vra_net_array, lib->minfo->pb_vra_netarray, MT_TYPE_MB_VRA_NETARR, "VRA_NET");
 #endif
 
 	is_load_ctrl_lock();
@@ -3487,24 +3476,11 @@ int is_load_bin(void)
 		mblk_init(&lib->mb_dma_taaisp, lib->minfo->pb_taaisp,
 				MT_TYPE_MB_DMA_TAAISP, "DMA_TAAISP");
 #endif
-#if (MEDRC_DMA_SIZE > 0)
-#if defined(SECURE_CAMERA_MEDRC)
-		mblk_init(&lib->mb_dma_medrc, lib->minfo->pb_medrc_s,
-				MT_TYPE_MB_DMA_MEDRC, "DMA_MEDRC_S");
-#else
-		mblk_init(&lib->mb_dma_medrc, lib->minfo->pb_medrc,
-				MT_TYPE_MB_DMA_MEDRC, "DMA_MEDRC");
-#endif
-#endif
 	} else
 #endif
 	{
 		mblk_init(&lib->mb_dma_taaisp, lib->minfo->pb_taaisp,
 				MT_TYPE_MB_DMA_TAAISP, "DMA_TAAISP");
-#if (MEDRC_DMA_SIZE > 0)
-		mblk_init(&lib->mb_dma_medrc, lib->minfo->pb_medrc,
-				MT_TYPE_MB_DMA_MEDRC, "DMA_MEDRC");
-#endif
 	}
 
 	spin_lock_init(&lib->slock_nmb);

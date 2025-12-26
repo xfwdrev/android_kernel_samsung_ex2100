@@ -315,14 +315,6 @@ static int is_interface_vra_probe(struct is_interface_ischain *itfc,
 		gPtr_lib_support.minfo		= itfc->minfo;
 
 		gPtr_lib_support.pdev		= pdev;
-
-		info_itfc("[ID:%2d] kvaddr for vra: 0x%lx\n", hw_id,
-			CALL_BUFOP(gPtr_lib_support.minfo->pb_vra, kvaddr,
-					gPtr_lib_support.minfo->pb_vra));
-	} else {
-		info_itfc("[ID:%2d] kvaddr for vra: 0x%lx\n", hw_id,
-			CALL_BUFOP(gPtr_lib_support.minfo->pb_vra, kvaddr,
-					gPtr_lib_support.minfo->pb_vra));
 	}
 
 	set_bit(IS_CHAIN_IF_STATE_INIT, &itf_vra->state);

@@ -97,6 +97,7 @@
 #define FSHARED_REGION_SIZE	(0x00010000)
 #define DATA_REGION_SIZE	(0x00010000)
 #define PARAM_REGION_SIZE	(0x00005000)	/* 20KB * instance(4) */
+#define SFR_DUMP_SIZE		(0x00008000)
 
 #define HEAP_RTA_START		(HEAP_START + SZ_64M + SZ_32M)		/* HEAP_SIZE(for DDK) should be smaller than 96MB */
 #define HEAP_RTA_SIZE		(IS_RESERVE_LIB_SIZE)	/* 6MB ~ */

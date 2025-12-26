@@ -1388,6 +1388,10 @@ static int sensor_module_probe(struct platform_device *pdev)
 	struct pinctrl_state *s;
 	u32 match_result = 0;
 	is_moudle_callback module_callback = NULL;
+	const struct firmware *setfile = NULL;
+	char *setfile_name;
+	struct is_resourcemgr *rscmgr;
+	struct is_mem *mem;
 
 	if (is_dev == NULL) {
 		warn("is_dev is not yet probed(sensor_module)");
@@ -1429,6 +1433,39 @@ static int sensor_module_probe(struct platform_device *pdev)
 	module->pdata = pdata;
 	module->dev = dev;
 	module->subdev = subdev_module;
+
+	/* copy preloaded firmware to the module */
+	if (setfile) {
+		rscmgr = &core->resourcemgr;
+		mem = &rscmgr->mem;
+
+		module->setfile_pb = CALL_PTR_MEMOP(mem, alloc, mem->priv,
+							setfile->size, NULL, 0);
+		if (IS_ERR(module->setfile_pb)) {
+			probe_err("failed to allocate buffer for %s, size: 0x%zx",
+							setfile_name, setfile->size);
+			/* clear error and set as an invalid private buffer */
+			module->setfile_pb = NULL;
+			module->setfile_kva = 0UL;
+			module->setfile_size = 0;
+		} else {
+			rscmgr->minfo.total_size += module->setfile_pb->size;
+			probe_info("[MEM] allocation for %s, size: 0x%zx\n", setfile_name,
+								module->setfile_pb->size);
+
+			module->setfile_kva = CALL_BUFOP(module->setfile_pb, kvaddr,
+								module->setfile_pb);
+			memcpy((void *)module->setfile_kva, setfile->data, setfile->size);
+			module->setfile_size = setfile->size;
+
+			probe_info("%s is preloaded after trying %d time(s), size: 0x%zx(0x%zx)\n",
+							setfile_name, device->setfile_preload_retry,
+							module->setfile_pb->size, setfile->size);
+		}
+
+		release_firmware(setfile);
+	}
+	module->setfile_pinned = of_property_read_bool(dev->of_node, "pinning_setfile");
 
 	/* DT data */
 	module->sensor_id = pdata->sensor_id;

@@ -69,7 +69,6 @@
 
 /* Tele sensor crop shift and OIS calibration will be applied instead of this feature in this project */
 /* #define OIS_CENTERING_SHIFT_ENABLE */
-#undef ENABLE_DYNAMIC_MEM
 
 #define USE_SENSOR_LONG_EXPOSURE_SHOT
 #define OIS_DUAL_CAL_DEFAULT_VALUE_WIDE 0

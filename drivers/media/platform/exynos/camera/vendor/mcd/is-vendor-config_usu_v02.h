@@ -67,7 +67,6 @@
 
 /* Tele sensor crop shift and OIS calibration will be applied instead of this feature in this project */
 /* #define OIS_CENTERING_SHIFT_ENABLE */
-#undef ENABLE_DYNAMIC_MEM
 
 #if defined(CONFIG_USE_CAMERA_LDU) || defined(CONFIG_SEC_FACTORY)
 #define USE_OIS_SHIFT_FOR_APERTURE

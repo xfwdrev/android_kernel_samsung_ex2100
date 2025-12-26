@@ -213,7 +213,6 @@ struct is_minfo {
 	struct is_priv_buf *pb_cal[SENSOR_POSITION_MAX];
 	struct is_priv_buf *pb_debug;
 	struct is_priv_buf *pb_event;
-	struct is_priv_buf *pb_fshared;
 	struct is_priv_buf *pb_pregion;
 	struct is_priv_buf *pb_heap_rta; /* RTA HEAP */
 	struct is_priv_buf *pb_heap_ddk; /* DDK HEAP */
@@ -221,10 +220,7 @@ struct is_minfo {
 	struct is_priv_buf *pb_taaisp_s;	/* secure */
 	struct is_priv_buf *pb_tnr;
 	struct is_priv_buf *pb_tnr_s;	/* secure */
-	struct is_priv_buf *pb_vra;
-	struct is_priv_buf *pb_vra_netarray;
 	struct is_priv_buf *pb_orbmch;
-	struct is_priv_buf *pb_clahe;
 	struct is_priv_buf *pb_sfr_dump_addr;
 	struct is_priv_buf *pb_sfr_dump_value;
 
