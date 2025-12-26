@@ -470,7 +470,6 @@ struct tcp_sock {
 	 * socket. Used to retransmit SYNACKs etc.
 	 */
 	struct request_sock __rcu *fastopen_rsk;
-	u32	*saved_syn;
 #ifdef CONFIG_MPTCP
 	/* MPTCP/TCP-specific callbacks */
 	const struct tcp_sock_ops	*ops;
