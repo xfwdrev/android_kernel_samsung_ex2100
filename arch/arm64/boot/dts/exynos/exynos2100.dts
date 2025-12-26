@@ -9203,9 +9203,9 @@
 			phandle = <0x145>;
 		};
 
-		vnfw_heap {
+		mfc_fw_rmem {
 			compatible = "shared-dma-pool";
-			size = <0x400000>;
+			reg = <0x00 0x96000000 0x800000>;
 			alignment = <0x00 0x400000>;
 			reusable;
 			phandle = <0x146>;
@@ -9218,12 +9218,6 @@
 			alloc-ranges = <0x00 0x40000000 0xb0000000>;
 			reusable;
 			phandle = <0x147>;
-		};
-
-		secure_camera_heap {
-			reg = <0x00 0x96000000 0x38b0000>;
-			alignment = <0x00 0x10000>;
-			phandle = <0x148>;
 		};
 
 		camera_heap {
@@ -17400,7 +17394,10 @@
 		compatible = "samsung,exynos-mfc";
 		iommus = <0x13b 0x13c 0x13d 0x13e>;
 		samsung,iommu-group = <0x13f>;
+		samsung,iommu-reserved-map = <0x00 0x00 0x10000000 0x00 0x10000000 0x100000 0x00 0x10100000 0x100000>;
+		samsung,iommu-identity-map = <0x00 0x15e10000 0x10000>;
 		samsung,tzmp;
+		memory-region = <0x146>;
 		ip_ver = <0x1500010c>;
 		debug_mode = <0x00>;
 		nal_q_entry_size = <0x300>;
@@ -17505,6 +17502,8 @@
 			clocks = <0x0d 0x5dc>;
 			iommus = <0x13b 0x13c>;
 			samsung,iommu-group = <0x13f>;
+			samsung,iommu-reserved-map = <0x00 0x10000000 0x100000>;
+			samsung,iommu-identity-map = <0x00 0x15e10000 0x10000>;
 			samsung,tzmp;
 			samsung,imgloader-s2mpu-support;
 			ip_ver = <0x1500010c>;
@@ -17516,8 +17515,6 @@
 			need_llc_flush = <0x00>;
 			mfc_votf_base = <0x18700000>;
 			gdc_votf_base = <0x15e10000>;
-			votf_start_offset = <0xf000>;
-			votf_end_offset = <0x10000>;
 			num_default_qos_steps = <0x09>;
 			num_encoder_qos_steps = <0x08>;
 			max_mb = <0x511b61>;
@@ -17723,6 +17720,7 @@
 			clocks = <0x0d 0x60e>;
 			iommus = <0x13d 0x13e>;
 			samsung,iommu-group = <0x13f>;
+			samsung,iommu-reserved-map = <0x00 0x10100000 0x100000>;
 			samsung,tzmp;
 			samsung,imgloader-s2mpu-support;
 			ip_ver = <0x1500010d>;
@@ -20947,9 +20945,8 @@
 		vframe_heap = "/reserved-memory/vframe_heap";
 		vscaler_heap = "/reserved-memory/vscaler_heap";
 		gpu_buffer = "/reserved-memory/gpu_buffer";
-		vnfw_heap = "/reserved-memory/vnfw_heap";
+		mfc_fw_rmem = "/reserved-memory/mfc_fw_rmem";
 		tui_heap = "/reserved-memory/tui_heap";
-		secure_camera_heap = "/reserved-memory/secure_camera_heap";
 		camera_heap = "/reserved-memory/camera_heap";
 		memlog_bl_base = "/memlog_bl_base";
 		sysmmu_d0_dpuf0 = "/sysmmu@19D00000";
