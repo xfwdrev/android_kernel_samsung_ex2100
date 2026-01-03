@@ -21,12 +21,81 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        model: [r9s, o1s, t2s, p3s]
-        variant: [ksu, susfs, vanilla]
+        include:
+          - model: r9s
+            branch: 12-upstream
+            variant: ksu
+          - model: r9s
+            branch: 12-upstream
+            variant: susfs
+          - model: r9s
+            branch: 12-upstream
+            variant: vanilla
+    
+          - model: o1s
+            branch: 12-upstream
+            variant: ksu
+          - model: o1s
+            branch: 12-upstream
+            variant: susfs
+          - model: o1s
+            branch: 12-upstream
+            variant: vanilla
+    
+          - model: t2s
+            branch: 12-upstream
+            variant: ksu
+          - model: t2s
+            branch: 12-upstream
+            variant: susfs
+          - model: t2s
+            branch: 12-upstream
+            variant: vanilla
+    
+          - model: p3s
+            branch: 12-upstream
+            variant: ksu
+          - model: p3s
+            branch: 12-upstream
+            variant: susfs
+          - model: p3s
+            branch: 12-upstream
+            variant: vanilla
+    
+          - model: r9s
+            branch: ksun
+            variant: ksu
+          - model: r9s
+            branch: ksun
+            variant: susfs
+    
+          - model: o1s
+            branch: ksun
+            variant: ksu
+          - model: o1s
+            branch: ksun
+            variant: susfs
+    
+          - model: t2s
+            branch: ksun
+            variant: ksu
+          - model: t2s
+            branch: ksun
+            variant: susfs
+    
+          - model: p3s
+            branch: ksun
+            variant: ksu
+          - model: p3s
+            branch: ksun
+            variant: susfs
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        ref: ${{ matrix.branch }}
+        fetch-depth: 0
 
     - name: Update apt
       run: sudo apt-get update
@@ -57,7 +126,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.model }}-${{ matrix.variant }}
+        name: ${{ matrix.model }}-${{ matrix.branch }}-${{ matrix.variant }}
         path: build/out/${{ matrix.model }}/*.zip
 
 
