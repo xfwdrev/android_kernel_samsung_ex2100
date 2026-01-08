@@ -2398,7 +2398,7 @@ static bool am_app_launch = false;
 
 #if CONFIG_KSWAPD_CPU
 static int set_kswapd_cpu_affinity_as_config(void);
-static int set_kswapd_cpu_affinity_as_boost(void);
+// static int set_kswapd_cpu_affinity_as_boost(void);
 #endif
 
 #ifdef CONFIG_SYSFS
@@ -2432,12 +2432,14 @@ static ssize_t mem_boost_mode_store(struct kobject *kobj,
 	if (mem_boost_mode >= BOOST_HIGH)
 		wake_ion_rbin_heap_prereclaim();
 #endif
-#if CONFIG_KSWAPD_CPU
+#if 0 /* Disabled: mem_boost should not override kswapd affinity */
+#ifdef CONFIG_KSWAPD_CPU
 	if (mem_boost_mode >= BOOST_HIGH)
 		set_kswapd_cpu_affinity_as_boost();
 	else if (mem_boost_mode == NO_BOOST)
 		set_kswapd_cpu_affinity_as_config();
 #endif
+#endif /* 0 */
 	return count;
 }
 
@@ -4316,6 +4318,7 @@ static int set_kswapd_cpu_affinity_as_config(void)
 	return 0;
 }
 
+#if 0
 static int set_kswapd_cpu_affinity_as_boost(void)
 {
 	int nid;
@@ -4332,6 +4335,7 @@ static int set_kswapd_cpu_affinity_as_boost(void)
 	}
 	return 0;
 }
+#endif
 #endif
 
 /*
