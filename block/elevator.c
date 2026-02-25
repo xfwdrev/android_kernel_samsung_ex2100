@@ -684,14 +684,17 @@ void elevator_init_mq(struct request_queue *q)
 		e = elevator_get(q, "bfq", false);
 	} else if (IS_ENABLED(CONFIG_MQ_KYBER_DEFAULT)) {
 		e = elevator_get(q, "kyber", false);
-	} else if (IS_ENABLED(CONFIG_MQ_KYBER_DEFAULT)) {
-		e = elevator_get(q, "kyber", false);
 	} else if (IS_ENABLED(CONFIG_MQ_SSG_DEFAULT)) {
 		e = elevator_get(q, "ssg", false);
-	} else if (!q->required_elevator_features)
+	} else if (IS_ENABLED(CONFIG_MQ_DEADLINE_DEFAULT)) {
+		e = elevator_get(q, "mq-deadline", false);
+	} else if (!q->required_elevator_features) {
+		if (IS_ENABLED(CONFIG_NONE_DEFAULT))
+			return;
 		e = elevator_get_default(q);
-	else
+	} else {
 		e = elevator_get_by_features(q);
+	}
 	if (!e)
 		return;
 
