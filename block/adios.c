@@ -9,7 +9,6 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/math.h>
 #include <linux/module.h>
 #include <linux/rbtree.h>
 #include <linux/sbitmap.h>
@@ -21,7 +20,6 @@
 #include <linux/list_sort.h>
 #include <linux/rcupdate.h>
 
-#include "elevator.h"
 #include "blk.h"
 #include "blk-mq.h"
 #include "blk-mq-sched.h"
@@ -32,7 +30,7 @@
  *
  * Tier 0 (Highest Priority): Emergency & System Integrity Requests
  * -----------------------------------------------------------------
- * - Target: Requests with the BLK_MQ_INSERT_AT_HEAD flag.
+ * - Target: Requests with the at_head flag.
  * - Purpose: For critical, non-negotiable operations such as device error
  *   recovery or flush sequences that must bypass all other scheduling logic.
  * - Implementation: Placed in a dedicated, high-priority FIFO queue
@@ -335,6 +333,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	u8  outlier_threshold_bucket = 0;
 	u8  outlier_percentile = LM_OUTLIER_PERCENTILE;
 	u8  reduction;
+	u8  i;
 
 	if (count_all)
 		outlier_percentile = 100;
@@ -343,7 +342,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	threshold_weight = (total_weight * outlier_percentile) / 100;
 
 	// Identify the bucket that corresponds to the outlier threshold
-	for (u8 i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
+	for (i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
 		cumulative_weight += buckets[i].sum_of_weights;
 		if (cumulative_weight >= threshold_weight) {
 			outlier_threshold_bucket = i;
@@ -352,7 +351,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	}
 
 	// Calculate the average latency, excluding outliers
-	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
+	for (i = 0; i <= outlier_threshold_bucket; i++) {
 		struct latency_bucket_small *bucket = &buckets[i];
 		if (i < outlier_threshold_bucket) {
 			sum_latency += bucket->weighted_sum_latency;
@@ -408,6 +407,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	u8  outlier_threshold_bucket = 0;
 	u8  outlier_percentile = LM_OUTLIER_PERCENTILE;
 	u8  reduction;
+	u8  i;
 
 	if (count_all)
 		outlier_percentile = 100;
@@ -416,7 +416,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	threshold_weight = (total_weight * outlier_percentile) / 100;
 
 	// Identify the bucket that corresponds to the outlier threshold
-	for (u8 i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
+	for (i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
 		cumulative_weight += buckets[i].sum_of_weights;
 		if (cumulative_weight >= threshold_weight) {
 			outlier_threshold_bucket = i;
@@ -425,7 +425,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	}
 
 	// Calculate the average latency and block size, excluding outliers
-	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
+	for (i = 0; i <= outlier_threshold_bucket; i++) {
 		struct latency_bucket_large *bucket = &buckets[i];
 		if (i < outlier_threshold_bucket) {
 			sum_latency += bucket->weighted_sum_latency;
@@ -810,14 +810,14 @@ static void remove_request(struct adios_data *ad, struct request *rq) {
 
 // Convert a queue depth to the corresponding word depth for shallow allocation
 static int to_word_depth(struct blk_mq_hw_ctx *hctx, unsigned int qdepth) {
-	struct sbitmap_queue *bt = &hctx->sched_tags->bitmap_tags;
+	struct sbitmap_queue *bt = hctx->sched_tags->bitmap_tags;
 	const unsigned int nrr = hctx->queue->nr_requests;
 
 	return ((qdepth << bt->sb.shift) + nrr - 1) / nrr;
 }
 
 // We limit the depth of request allocation for asynchronous and write requests
-static void adios_limit_depth(blk_opf_t opf, struct blk_mq_alloc_data *data) {
+static void adios_limit_depth(unsigned int opf, struct blk_mq_alloc_data *data) {
 	struct adios_data *ad = data->q->elevator->elevator_data;
 
 	// Do not throttle synchronous reads
@@ -835,7 +835,7 @@ static void adios_depth_updated(struct blk_mq_hw_ctx *hctx) {
 
 	ad->async_depth = q->nr_requests;
 
-	sbitmap_queue_min_shallow_depth(&tags->bitmap_tags, 1);
+	sbitmap_queue_min_shallow_depth(tags->bitmap_tags, 1);
 }
 
 // Handle request merging after a merge operation
@@ -884,8 +884,8 @@ static bool adios_bio_merge(struct request_queue *q, struct bio *bio,
 }
 
 static bool merge_or_insert_to_dl_tree(struct adios_data *ad,
-		struct request *rq, struct request_queue *q, struct list_head *free) {
-	if (blk_mq_sched_try_insert_merge(q, rq, free))
+		struct request *rq, struct request_queue *q) {
+	if (blk_mq_sched_try_insert_merge(q, rq))
 		return true;
 
 	bool dl_idx = adios_optype_not_read(rq);
@@ -921,7 +921,7 @@ static void insert_to_prio_queue(struct adios_data *ad,
 
 // Insert a request into the scheduler (after Read & Write models stabilized)
 static void insert_request_post_stability(struct blk_mq_hw_ctx *hctx,
-		struct request *rq, blk_insert_t insert_flags, struct list_head *free) {
+		struct request *rq, bool at_head) {
 	struct request_queue *q = hctx->queue;
 	struct adios_data *ad = q->elevator->elevator_data;
 	struct adios_rq_data *rd = get_rq_data(rq);
@@ -935,8 +935,8 @@ static void insert_request_post_stability(struct blk_mq_hw_ctx *hctx,
 	if (unlikely(rd->pred_lat > ad->lat_model_latency_limit))
 		rd->pred_lat = ad->lat_model_latency_limit;
 
-	/* Tier-0: BLK_MQ_INSERT_AT_HEAD Requests */
-	if (insert_flags & BLK_MQ_INSERT_AT_HEAD) {
+	/* Tier-0: at_head Requests */
+	if (at_head) {
 		insert_to_prio_queue(ad, rq, 0);
 		return;
 	}
@@ -958,17 +958,17 @@ static void insert_request_post_stability(struct blk_mq_hw_ctx *hctx,
 		return;
 	}
 
-	if (merge_or_insert_to_dl_tree(ad, rq, q, free))
+	if (merge_or_insert_to_dl_tree(ad, rq, q))
 		return;
 }
 
 // Insert a request into the scheduler (before Read & Write models stabilizes)
 static void insert_request_pre_stability(struct blk_mq_hw_ctx *hctx,
-		struct request *rq, blk_insert_t insert_flags, struct list_head *free) {
+		struct request *rq, bool at_head) {
 	struct adios_data *ad = hctx->queue->elevator->elevator_data;
 	struct adios_rq_data *rd = get_rq_data(rq);
 	u8 optype = adios_optype(rq);
-	u8 pq_idx = !(insert_flags & BLK_MQ_INSERT_AT_HEAD);
+	u8 pq_idx = at_head ? 0 : 1;
 	bool stable = false;
 
 	rd->managed = true;
@@ -993,12 +993,11 @@ static void insert_request_pre_stability(struct blk_mq_hw_ctx *hctx,
 // Insert multiple requests into the scheduler
 static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 				   struct list_head *list,
-				   blk_insert_t insert_flags) {
+				   bool at_head) {
 	struct request_queue *q = hctx->queue;
 	struct adios_data *ad = q->elevator->elevator_data;
 	struct request *rq;
 	bool stop = false;
-	LIST_HEAD(free);
 
 	do {
 	scoped_guard(spinlock_irqsave, &ad->lock)
@@ -1010,12 +1009,10 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 		rq = list_first_entry(list, struct request, queuelist);
 		list_del_init(&rq->queuelist);
 		if (likely(ad->models_stable))
-			insert_request_post_stability(hctx, rq, insert_flags, &free);
+			insert_request_post_stability(hctx, rq, at_head);
 		else
-			insert_request_pre_stability(hctx, rq, insert_flags, &free);
+			insert_request_pre_stability(hctx, rq, at_head);
 	}} while (!stop);
-
-	blk_mq_free_requests(&free);
 }
 
 // Prepare a request before it is inserted into the scheduler
@@ -1038,8 +1035,7 @@ static struct adios_rq_data *get_dl_first_rd(struct adios_data *ad, bool idx) {
 }
 
 // Comparison function for sorting requests by block address
-static int cmp_rq_pos(void *priv,
-		const struct list_head *a, const struct list_head *b) {
+static int cmp_rq_pos(void *priv, struct list_head *a, struct list_head *b) {
 	struct request *rq_a = list_entry(a, struct request, queuelist);
 	struct request *rq_b = list_entry(b, struct request, queuelist);
 	u64 pos_a = blk_rq_pos(rq_a);
@@ -1341,17 +1337,13 @@ static bool release_barrier_requests(struct adios_data *ad) {
 
 	if (!list_empty(&local_list)) {
 		struct request *trq, *next;
-		LIST_HEAD(free_list);
 
 		/* ad->lock is already held */
 		list_for_each_entry_safe(trq, next, &local_list, queuelist) {
 			list_del_init(&trq->queuelist);
-			if (merge_or_insert_to_dl_tree(ad, trq, ad->queue, &free_list))
+			if (merge_or_insert_to_dl_tree(ad, trq, ad->queue))
 				continue;
 		}
-
-		if (!list_empty(&free_list))
-			blk_mq_free_requests(&free_list);
 	}
 
 	return true;
@@ -1496,6 +1488,7 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 	struct elevator_queue *eq;
 	int ret = -ENOMEM;
 	u8 optype = 0;
+	u8 i;
 
 	eq = elevator_alloc(q, e);
 	if (!eq) {
@@ -1534,10 +1527,10 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 		goto destroy_rq_data_pool;
 	}
 
-	for (int i = 0; i < ADIOS_PQ_LEVELS; i++)
+	for (i = 0; i < ADIOS_PQ_LEVELS; i++)
 		INIT_LIST_HEAD(&ad->prio_queue[i]);
 
-	for (u8 i = 0; i < ADIOS_DL_TYPES; i++) {
+	for (i = 0; i < ADIOS_DL_TYPES; i++) {
 		ad->dl_tree[i] = RB_ROOT_CACHED;
 		ad->dl_prio[i] = default_dl_prio[i];
 	}
@@ -1599,7 +1592,7 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 
 	eq->elevator_data = ad;
 
-	ad->is_rotational = !!(q->limits.features & BLK_FEAT_ROTATIONAL);
+	ad->is_rotational = !blk_queue_nonrot(q);
 	ad->global_latency_window = (ad->is_rotational)?
 		default_global_latency_window_rotational:
 		default_global_latency_window;
@@ -1619,9 +1612,6 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 	INIT_LIST_HEAD(&ad->barrier_queue);
 
 	timer_setup(&ad->update_timer, update_timer_callback, 0);
-
-	/* We dispatch from request queue wide instead of hw queue */
-	blk_queue_flag_set(QUEUE_FLAG_SQ_SCHED, q);
 
 	ad->queue = q;
 	blk_stat_enable_accounting(q);
@@ -1656,14 +1646,15 @@ put_eq:
 // Clean up and free resources when exiting the scheduler
 static void adios_exit_sched(struct elevator_queue *e) {
 	struct adios_data *ad = e->elevator_data;
+	u8 i;
 
-	timer_shutdown_sync(&ad->update_timer);
+	del_timer_sync(&ad->update_timer);
 
 	WARN_ON_ONCE(!list_empty(&ad->barrier_queue));
-	for (int i = 0; i < 2; i++)
+	for (i = 0; i < 2; i++)
 		WARN_ON_ONCE(!list_empty(&ad->prio_queue[i]));
 
-	for (u8 i = 0; i < ADIOS_OPTYPES; i++) {
+	for (i = 0; i < ADIOS_OPTYPES; i++) {
 		struct latency_model *model = &ad->latency_model[i];
 		struct latency_model_params *params = rcu_access_pointer(model->params);
 
@@ -1684,8 +1675,6 @@ static void adios_exit_sched(struct elevator_queue *e) {
 
 	if (ad->dl_group_pool)
 		kmem_cache_destroy(ad->dl_group_pool);
-
-	blk_stat_disable_accounting(ad->queue);
 
 	kfree(ad);
 }
@@ -2049,6 +2038,7 @@ static struct elevator_type mq_adios = {
 	},
 	.elevator_attrs = adios_sched_attrs,
 	.elevator_name = "adios",
+	.elevator_features = ELEVATOR_F_MQ_AWARE,
 	.elevator_owner = THIS_MODULE,
 };
 MODULE_ALIAS("mq-adios-iosched");
