@@ -1399,6 +1399,9 @@ static void adios_completed_request(struct request *rq, u64 now) {
 	struct adios_rq_data *rd = get_rq_data(rq);
 	union adios_in_flight_rqs ifr = { .scalar = 0 };
 
+	if (!rd)
+		return;
+
 	if (rd->managed) {
 		union adios_in_flight_rqs ifr_to_sub = {
 			.count          = 1,
