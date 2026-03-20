@@ -688,6 +688,8 @@ void elevator_init_mq(struct request_queue *q)
 		e = elevator_get(q, "kyber", false);
 	} else if (IS_ENABLED(CONFIG_MQ_SSG_DEFAULT)) {
 		e = elevator_get(q, "ssg", false);
+	} else if (IS_ENABLED(CONFIG_MQ_ADIOS_DEFAULT)) {
+		e = elevator_get(q, "adios", false);
 	} else if (!q->required_elevator_features)
 		e = elevator_get_default(q);
 	else

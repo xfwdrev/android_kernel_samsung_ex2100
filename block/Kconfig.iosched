@@ -87,6 +87,9 @@ choice
 	config MQ_SSG_DEFAULT
 		bool "SamSung Generic I/O scheduler"
 		depends on MQ_IOSCHED_SSG
+	config MQ_ADIOS_DEFAULT
+		bool "Adaptive Deadline"
+		depends on MQ_IOSCHED_ADIOS
 	config NONE_DEFAULT
 		bool "NONE"
 endchoice
