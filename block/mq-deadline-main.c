@@ -535,7 +535,7 @@ unlock:
  */
 static int dd_to_word_depth(struct blk_mq_hw_ctx *hctx, unsigned int qdepth)
 {
-	struct sbitmap_queue *bt = hctx->sched_tags->bitmap_tags;
+	struct sbitmap_queue *bt = &hctx->sched_tags->bitmap_tags;
 	const unsigned int nrr = hctx->queue->nr_requests;
 
 	return ((qdepth << bt->sb.shift) + nrr - 1) / nrr;
@@ -569,7 +569,7 @@ static void dd_depth_updated(struct blk_mq_hw_ctx *hctx)
 
 	dd->async_depth = q->nr_requests;
 
-	sbitmap_queue_min_shallow_depth(tags->bitmap_tags, 1);
+	sbitmap_queue_min_shallow_depth(&tags->bitmap_tags, 1);
 }
 
 /* Called by blk_mq_init_hctx() and blk_mq_init_sched(). */
@@ -804,9 +804,22 @@ static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 }
 
 /* Callback from inside blk_mq_rq_ctx_init(). */
-static void dd_prepare_request(struct request *rq)
+static void dd_prepare_request(struct request *rq, struct bio *bio)
 {
+	(void)bio;
 	rq->elv.priv[0] = NULL;
+}
+
+static bool dd_has_write_work(struct blk_mq_hw_ctx *hctx)
+{
+	struct deadline_data *dd = hctx->queue->elevator->elevator_data;
+	enum dd_prio p;
+
+	for (p = 0; p <= DD_PRIO_MAX; p++)
+		if (!list_empty_careful(&dd->per_prio[p].fifo_list[DD_WRITE]))
+			return true;
+
+	return false;
 }
 
 /*
@@ -832,7 +845,6 @@ static void dd_finish_request(struct request *rq)
 	struct dd_blkcg *blkcg = rq->elv.priv[0];
 	const u8 ioprio_class = dd_rq_ioclass(rq);
 	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
-	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
 	dd_count(dd, completed, prio);
 	ddcg_count(blkcg, completed, ioprio_class);
@@ -842,16 +854,11 @@ static void dd_finish_request(struct request *rq)
 
 		spin_lock_irqsave(&dd->zone_lock, flags);
 		blk_req_zone_write_unlock(rq);
-		if (!list_empty(&per_prio->fifo_list[DD_WRITE]))
-			blk_mq_sched_mark_restart_hctx(rq->mq_hctx);
 		spin_unlock_irqrestore(&dd->zone_lock, flags);
+
+		if (dd_has_write_work(rq->mq_hctx))
+			blk_mq_sched_mark_restart_hctx(rq->mq_hctx);
 	}
-
-	if (unlikely(!(rq->rq_flags & RQF_ELVPRIV)))
-		return;
-
-	if (dd_op_is_async_write(rq->cmd_flags))
-		atomic_dec(&dd->async_write_cnt);
 }
 
 static bool dd_has_work_for_prio(struct dd_per_prio *per_prio)
