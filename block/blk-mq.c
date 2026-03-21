@@ -1604,7 +1604,7 @@ EXPORT_SYMBOL(blk_mq_delay_run_hw_queue);
  * pending requests to be sent. If this is true, run the queue to send requests
  * to hardware.
  */
-void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
+bool blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 {
 	int srcu_idx;
 	bool need_run;
