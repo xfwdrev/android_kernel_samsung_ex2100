@@ -1805,8 +1805,7 @@ static int do_proc_readlink(struct path *path, char __user *buffer, int buflen)
 			len = strlen(tmp);
 			if (copy_to_user(buffer, tmp, len))
 				len = -EFAULT;
-			kfree(tmp);
-			return len;
+			goto out;
 		}
 	}
 #endif
