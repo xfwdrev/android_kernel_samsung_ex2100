@@ -109,12 +109,7 @@ static unsigned int spectre_v2_install_workaround(unsigned int method)
 #else
 static unsigned int spectre_v2_install_workaround(unsigned int method)
 {
-<<<<<<< HEAD
-	pr_info("CPU%u: Spectre V2: workarounds disabled by configuration\n",
-		smp_processor_id());
-=======
 	pr_info_once("Spectre V2: workarounds disabled by configuration\n");
->>>>>>> aosp_android11-5.4
 
 	return SPECTRE_VULNERABLE;
 }
@@ -226,17 +221,10 @@ static int spectre_bhb_install_workaround(int method)
 			return SPECTRE_VULNERABLE;
 
 		spectre_bhb_method = method;
-<<<<<<< HEAD
-	}
-
-	pr_info("CPU%u: Spectre BHB: using %s workaround\n",
-		smp_processor_id(), spectre_bhb_method_name(method));
-=======
 
 		pr_info("CPU%u: Spectre BHB: enabling %s workaround for all CPUs\n",
 			smp_processor_id(), spectre_bhb_method_name(method));
 	}
->>>>>>> aosp_android11-5.4
 
 	return SPECTRE_MITIGATED;
 }
@@ -312,10 +300,7 @@ void cpu_v7_ca15_ibe(void)
 {
 	if (check_spectre_auxcr(this_cpu_ptr(&spectre_warned), BIT(0)))
 		cpu_v7_spectre_v2_init();
-<<<<<<< HEAD
-=======
 	cpu_v7_spectre_bhb_init();
->>>>>>> aosp_android11-5.4
 }
 
 void cpu_v7_bugs_init(void)
