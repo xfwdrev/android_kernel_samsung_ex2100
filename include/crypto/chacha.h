@@ -22,17 +22,10 @@
 #define CHACHA_IV_SIZE		16
 
 #define CHACHA_KEY_SIZE		32
-#define CHACHA20_KEY_SIZE	32
 #define CHACHA_BLOCK_SIZE	64
-#define CHACHA20_BLOCK_SIZE	64
+#define CHACHAPOLY_IV_SIZE	12
 
 #define CHACHA_STATE_WORDS	(CHACHA_BLOCK_SIZE / sizeof(u32))
-
-#ifdef CONFIG_X86_64
-#define CHACHA_STATE_WORDS	((CHACHA_BLOCK_SIZE + 12) / sizeof(u32))
-#else
-#define CHACHA_STATE_WORDS	(CHACHA_BLOCK_SIZE / sizeof(u32))
-#endif
 
 /* 192-bit nonce, then 64-bit stream position */
 #define XCHACHA_IV_SIZE		32
@@ -116,52 +109,6 @@ static inline void chacha_init_consts(u32 *state)
 	state[1]  = CHACHA_CONSTANT_ND_3;
 	state[2]  = CHACHA_CONSTANT_2_BY;
 	state[3]  = CHACHA_CONSTANT_TE_K;
-}
-
-void chacha_init_arch(u32 *state, const u32 *key, const u8 *iv);
-static inline void chacha_init_generic(u32 *state, const u32 *key, const u8 *iv)
-{
-	chacha_init_consts(state);
-	state[4]  = key[0];
-	state[5]  = key[1];
-	state[6]  = key[2];
-	state[7]  = key[3];
-	state[8]  = key[4];
-	state[9]  = key[5];
-	state[10] = key[6];
-	state[11] = key[7];
-	state[12] = get_unaligned_le32(iv +  0);
-	state[13] = get_unaligned_le32(iv +  4);
-	state[14] = get_unaligned_le32(iv +  8);
-	state[15] = get_unaligned_le32(iv + 12);
-}
-
-static inline void chacha_init(u32 *state, const u32 *key, const u8 *iv)
-{
-	if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_CHACHA))
-		chacha_init_arch(state, key, iv);
-	else
-		chacha_init_generic(state, key, iv);
-}
-
-void chacha_crypt_arch(u32 *state, u8 *dst, const u8 *src,
-		       unsigned int bytes, int nrounds);
-void chacha_crypt_generic(u32 *state, u8 *dst, const u8 *src,
-			  unsigned int bytes, int nrounds);
-
-static inline void chacha_crypt(u32 *state, u8 *dst, const u8 *src,
-				unsigned int bytes, int nrounds)
-{
-	if (IS_ENABLED(CONFIG_CRYPTO_ARCH_HAVE_LIB_CHACHA))
-		chacha_crypt_arch(state, dst, src, bytes, nrounds);
-	else
-		chacha_crypt_generic(state, dst, src, bytes, nrounds);
-}
-
-static inline void chacha20_crypt(u32 *state, u8 *dst, const u8 *src,
-				  unsigned int bytes)
-{
-	chacha_crypt(state, dst, src, bytes, 20);
 }
 
 #endif /* _CRYPTO_CHACHA_H */
