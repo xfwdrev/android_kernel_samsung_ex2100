@@ -13796,6 +13796,18 @@
 			phandle = <0x0e>;
 		};
 
+		cpu@0000 {
+			device_type = "cpu";
+			compatible = "arm,ananke", "arm,armv8";
+			reg = <0x00 0x00>;
+			capacity-dmips-mhz = <0x104>;
+			dynamic-power-coefficient = <0x59>;
+			enable-method = "psci";
+			cpu-idle-states = <0x104>;
+			sched-energy-data = <0x105>;
+			phandle = <0x0e>;
+		};
+
 		cpu@0100 {
 			device_type = "cpu";
 			compatible = "arm,ananke", "arm,armv8";
@@ -13872,8 +13884,8 @@
 			device_type = "cpu";
 			compatible = "arm,hera", "arm,armv8";
 			reg = <0x00 0x700>;
-			capacity-dmips-mhz = <0x3e5>;
-			dynamic-power-coefficient = <0x2f5>;
+			capacity-dmips-mhz = <0x400>;
+			dynamic-power-coefficient = <0x240>;
 			enable-method = "psci";
 			cpu-idle-states = <0x108>;
 			sched-energy-data = <0x109>;

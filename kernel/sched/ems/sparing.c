@@ -8,6 +8,10 @@
 #include "../sched.h"
 #include "ems.h"
 
+#include <linux/cpu.h>
+#include <linux/device.h>
+#include <linux/workqueue.h>
+
 #include <trace/events/ems.h>
 #include <trace/events/ems_debug.h>
 
@@ -26,6 +30,15 @@ static struct {
 	struct cpumask user_cpus;
 } ecs;
 
+static struct {
+	struct work_struct work;
+	int cpu;
+	bool online;
+} ecs_prime_hp = {
+	.cpu = -1,
+	.online = true,
+};
+
 #define MAX_ECS_STAGE	VENDOR_NR_CPUS
 
 static struct {
@@ -41,6 +54,65 @@ struct ecs_env {
 };
 static DEFINE_PER_CPU(struct ecs_env, ecs_env);
 static DEFINE_PER_CPU(struct cpu_stop_work, ecs_migration_work);
+
+static void ecs_prime_hotplug_workfn(struct work_struct *work)
+{
+	struct device *dev;
+	int cpu = ecs_prime_hp.cpu;
+	bool want_online = READ_ONCE(ecs_prime_hp.online);
+	int ret;
+
+	if (cpu <= 0)
+		return;
+
+	dev = get_cpu_device(cpu);
+	if (!dev) {
+		pr_warn("ecs: failed to get CPU%d device\n", cpu);
+		return;
+	}
+
+	ret = lock_device_hotplug_sysfs();
+	if (ret) {
+		pr_warn("ecs: failed to lock hotplug for CPU%d (%d)\n", cpu, ret);
+		return;
+	}
+
+	if (want_online) {
+		if (!dev->offline)
+			goto out_unlock;
+
+		ret = device_online(dev);
+		if (ret)
+			pr_warn("ecs: failed to online CPU%d (%d)\n", cpu, ret);
+	} else {
+		if (dev->offline)
+			goto out_unlock;
+
+		ret = device_offline(dev);
+		if (ret)
+			pr_warn("ecs: failed to offline CPU%d (%d)\n", cpu, ret);
+	}
+
+out_unlock:
+	unlock_device_hotplug();
+}
+
+static void ecs_sync_prime_hotplug(void)
+{
+	bool want_online;
+
+	if (ecs_prime_hp.cpu <= 0)
+		return;
+
+	want_online = cpumask_test_cpu(ecs_prime_hp.cpu, &ecs.cpus);
+
+	if (want_online == READ_ONCE(ecs_prime_hp.online) &&
+	    want_online == cpu_online(ecs_prime_hp.cpu))
+		return;
+
+	WRITE_ONCE(ecs_prime_hp.online, want_online);
+	schedule_work(&ecs_prime_hp.work);
+}
 
 static void
 migrate_any_task(struct task_struct *p, struct rq *src_rq, struct rq *dst_rq)
@@ -174,6 +246,8 @@ static void update_ecs_cpus(void)
 
 	cpumask_and(&ecs.cpus, &ecs.cur_stage->cpus, cpu_possible_mask);
 	cpumask_and(&ecs.cpus, &ecs.cpus, &ecs.user_cpus);
+
+        ecs_sync_prime_hotplug();
 
 	cpumask_andnot(&complement_cpus, &prev_cpus, &ecs.cpus);
 	if (cpumask_empty(&complement_cpus))
@@ -654,6 +728,9 @@ int ecs_init(void)
 
 	ecs.cur_stage = &default_stage;
 	ecs.stage_list = &default_stage_list;
+
+	ecs_prime_hp.cpu = cpumask_last(cpu_possible_mask);
+	INIT_WORK(&ecs_prime_hp.work, ecs_prime_hotplug_workfn);
 
 	dn = of_find_node_by_path("/ems/ecs");
 	if (!dn) {
