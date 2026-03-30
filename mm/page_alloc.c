@@ -8099,6 +8099,27 @@ static void __setup_per_zone_wmarks(void)
 	calculate_totalreserve_pages();
 }
 
+static void __init watermark_scale_factor_init(void)
+{
+	unsigned long total_ram_mb = memblock_phys_mem_size() >> 20;
+
+	/*
+	 * Use physical RAM rather than totalram_pages(), which is already
+	 * reduced by reserved-memory carveouts on these Exynos devices.
+	 *
+	 * Keep the 6 GB class on the safest watermark spacing and scale up
+	 * gradually for the larger 8/12/16 GB variants in this family.
+	 */
+	if (total_ram_mb > 14000)
+		watermark_scale_factor = 60;
+	else if (total_ram_mb > 10000)
+		watermark_scale_factor = 50;
+	else if (total_ram_mb > 6200)
+		watermark_scale_factor = 40;
+	else
+		watermark_scale_factor = 30;
+}
+
 /**
  * setup_per_zone_wmarks - called when min_free_kbytes changes
  * or when memory is hot-{added|removed}
@@ -8157,6 +8178,8 @@ int __meminit init_per_zone_wmark_min(void)
 		pr_warn("min_free_kbytes is not updated to %d because user defined value %d is preferred\n",
 				new_min_free_kbytes, user_min_free_kbytes);
 	}
+
+	watermark_scale_factor_init();
 	setup_per_zone_wmarks();
 	refresh_zone_stat_thresholds();
 	setup_per_zone_lowmem_reserve();
