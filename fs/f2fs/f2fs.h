@@ -21,6 +21,7 @@
 #include <linux/vmalloc.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/printk.h>
 #include <linux/quotaops.h>
 #include <crypto/hash.h>
 #include <linux/ctype.h>
@@ -37,7 +38,7 @@
 #include <linux/stlog.h>
 #endif
 #else
-#define ST_LOG(fmt, ...)
+#define ST_LOG(fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 /* @fs.sec -- ef5f3ea8a5ac82ae371e21c3f69ae858 -- */
