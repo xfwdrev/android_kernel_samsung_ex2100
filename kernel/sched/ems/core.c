@@ -62,7 +62,6 @@ static int get_pe_list_size(void)
 
 static int tiny_threshold = 16;
 
-#ifndef CONFIG_SCHED_CASS
 static void select_fit_cpus(struct tp_env *env)
 {
 	struct cpumask fit_cpus;
@@ -285,7 +284,6 @@ static void get_ready_env(struct tp_env *env)
 		*(unsigned int *)cpumask_bits(&env->candidates),
 		*(unsigned int *)cpumask_bits(&env->idle_candidates));
 }
-#endif /* !CONFIG_SCHED_CASS */
 
 static int
 exynos_select_task_rq_dl(struct task_struct *p, int prev_cpu,
@@ -303,12 +301,12 @@ exynos_select_task_rq_rt(struct task_struct *p, int prev_cpu,
 	/* TODO */
 	return -1;
 }
+#endif /* !CONFIG_SCHED_CASS */
 
 extern void sync_entity_load_avg(struct sched_entity *se);
 
-static int
-exynos_select_task_rq_fair(struct task_struct *p, int prev_cpu,
-			   int sd_flag, int wake_flag)
+int ems_select_task_rq_fair(struct task_struct *p, int prev_cpu,
+			    int sd_flag, int wake_flag)
 {
 	int target_cpu = -1;
 	int sync = (wake_flag & WF_SYNC) && !(current->flags & PF_EXITING);
@@ -414,7 +412,6 @@ exynos_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 
 	return target_cpu;
 }
-#endif /* !CONFIG_SCHED_CASS */
 
 int ems_can_migrate_task(struct task_struct *p, int dst_cpu)
 {
@@ -954,12 +951,16 @@ int exynos_select_task_rq(struct task_struct *p, int prev_cpu,
 		if ((wake_flag & WF_SYNC_CL) &&
 		    !(current->flags & PF_EXITING)) {
 			struct cpumask cl_sync_mask;
+			struct cpumask allowed_mask;
 			int cl_sync_cpu = smp_processor_id();
 
-			cpumask_and(&cl_sync_mask, p->cpus_ptr,
-					cpu_coregroup_mask(cl_sync_cpu));
-			cpumask_and(&cl_sync_mask, &cl_sync_mask,
+			cpumask_and(&allowed_mask, p->cpus_ptr, cpu_active_mask);
+			cpumask_and(&allowed_mask, &allowed_mask,
+					ecs_cpus_allowed(p));
+			cpumask_and(&allowed_mask, &allowed_mask,
 					emstune_cpus_allowed(p));
+			cpumask_and(&cl_sync_mask, &allowed_mask,
+					cpu_coregroup_mask(cl_sync_cpu));
 			if (!cpumask_empty(&cl_sync_mask)) {
 				cpu = cpumask_any(&cl_sync_mask);
 				trace_ems_select_task_rq(p, cpu, wake, "cl sync");
@@ -977,7 +978,7 @@ int exynos_select_task_rq(struct task_struct *p, int prev_cpu,
 	else if (p->sched_class == &rt_sched_class)
 		cpu = exynos_select_task_rq_rt(p, prev_cpu, sd_flag, wake_flag);
 	else if (p->sched_class == &fair_sched_class)
-		cpu = exynos_select_task_rq_fair(p, prev_cpu, sd_flag, wake_flag);
+		cpu = ems_select_task_rq_fair(p, prev_cpu, sd_flag, wake_flag);
 
 	if (cpu >= 0 && !is_dst_allowed(p, cpu))
 		cpu = -1;
