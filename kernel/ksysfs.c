@@ -202,22 +202,22 @@ bool freq_control_blocking_enabled(void)
 }
 EXPORT_SYMBOL_GPL(freq_control_blocking_enabled);
 
-static ssize_t freq_control_blocking_enabled_show(struct kobject *kobj,
-						  struct kobj_attribute *attr,
-						  char *buf)
+static ssize_t throttlers_protection_show(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  char *buf)
 {
 	return sprintf(buf, "%d\n", freq_control_blocking_enabled());
 }
 
-static ssize_t freq_control_blocking_enabled_store(struct kobject *kobj,
-						   struct kobj_attribute *attr,
-						   const char *buf,
-						   size_t count)
+static ssize_t throttlers_protection_store(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   const char *buf,
+					   size_t count)
 {
 	bool enable;
 
 	if (!init_protection_enabled()) {
-		pr_info("freq control blocking locked disabled by init_protection=0\n");
+		pr_info("throttlers protection locked disabled by init_protection=0\n");
 		return count;
 	}
 
@@ -225,11 +225,11 @@ static ssize_t freq_control_blocking_enabled_store(struct kobject *kobj,
 		return -EINVAL;
 
 	WRITE_ONCE(freq_control_blocking, enable);
-	pr_info("freq control blocking %s\n", enable ? "enabled" : "disabled");
+	pr_info("throttlers protection %s\n", enable ? "enabled" : "disabled");
 
 	return count;
 }
-KERNEL_ATTR_RW(freq_control_blocking_enabled);
+KERNEL_ATTR_RW(throttlers_protection);
 
 /*
  * Make /sys/kernel/notes give the raw contents of our kernel .notes section.
@@ -278,7 +278,7 @@ static struct attribute * kernel_attrs[] = {
 	&rcu_expedited_attr.attr,
 	&rcu_normal_attr.attr,
 #endif
-	&freq_control_blocking_enabled_attr.attr,
+	&throttlers_protection_attr.attr,
 	NULL
 };
 
