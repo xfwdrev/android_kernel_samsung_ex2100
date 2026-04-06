@@ -8117,7 +8117,7 @@ static void __init watermark_scale_factor_init(void)
 	else if (total_ram_mb > 6200)
 		watermark_scale_factor = 40;
 	else
-		watermark_scale_factor = 30;
+		watermark_scale_factor = 40;
 }
 
 /**
