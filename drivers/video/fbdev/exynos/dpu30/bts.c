@@ -1043,8 +1043,7 @@ void dpu_bts_release_bw(struct decon_device *decon)
 
 	if ((decon->dt.out_type == DECON_OUT_DSI) ||
 		(decon->dt.out_type == DECON_OUT_WB)) {
-		if (decon->bts.prev_total_bw)
-			bts_update_bw(decon->bts.bw_idx, bw);
+		bts_update_bw(decon->bts.bw_idx, bw);
 		decon->bts.prev_total_bw = 0;
 #if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
 		exynos_pm_qos_update_request(&decon->bts.disp_qos, 0);
@@ -1088,8 +1087,7 @@ void dpu_bts_hiber_release_bw(struct decon_device *decon)
 		return;
 
 	if (decon->dt.out_type == DECON_OUT_DSI) {
-		if (decon->bts.prev_total_bw)
-			bts_update_bw(decon->bts.bw_idx, bw);
+		bts_update_bw(decon->bts.bw_idx, bw);
 		decon->bts.prev_total_bw = 0;
 #if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
 		exynos_pm_qos_update_request(&decon->bts.disp_qos, 0);

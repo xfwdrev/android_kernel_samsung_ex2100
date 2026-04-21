@@ -3171,9 +3171,6 @@ static int panel_set_mask_layer(struct panel_device *panel, void *arg)
 
 	if (req_data->req_mask_layer == MASK_LAYER_ON) {
 		if (req_data->trigger_time  == MASK_LAYER_TRIGGER_BEFORE) {
-			ret = panel_wake_lock(panel, WAKE_TIMEOUT_MSEC);
-			if (ret < 0)
-				panel_warn("failed to wake lock for mask layer (%d)\n", ret);
 
 			/*
 			 * W/A - During smooth dimming transition,
@@ -3248,9 +3245,6 @@ static int panel_set_mask_layer(struct panel_device *panel, void *arg)
 			panel_bl->props.smooth_transition = SMOOTH_TRANS_ON;
 			panel_bl->props.mask_layer_br_actual = 0;
 			sysfs_notify(&panel->lcd_dev->kobj, NULL, "actual_mask_brightness");
-			ret = panel_wake_unlock(panel);
-			if (ret < 0)
-				panel_warn("failed to wake unlock for mask layer (%d)\n", ret);
 		}
 	}
 	return ret;
