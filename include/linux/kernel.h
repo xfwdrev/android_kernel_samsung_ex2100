@@ -741,7 +741,6 @@ do {							\
 	else						\
 		trace_puts(fmt);			\
 } while (0)
-#endif
 
 #define do_trace_printk(fmt, args...)					\
 do {									\
