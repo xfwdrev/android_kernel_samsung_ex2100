@@ -138,6 +138,25 @@ rm -rf build/out/$MODEL
 mkdir -p build/out/$MODEL/zip/files
 mkdir -p build/out/$MODEL/zip/META-INF/com/google/android
 
+set_localversion() {
+    CONFIG_FILE="out/.config"
+
+    BASE_LV=$(grep -E '^CONFIG_LOCALVERSION=' "$CONFIG_FILE" | cut -d'"' -f2)
+
+    LV_SUFFIX=""
+
+    if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
+        LV_SUFFIX="-KSUN-SUSFS"
+    elif [[ "$KSU_OPTION" == "y" ]]; then
+        LV_SUFFIX="-KSUN"
+    fi
+
+    UPDATED_LV="${BASE_LV}${LV_SUFFIX}"
+
+    ./scripts/config --file "$CONFIG_FILE" \
+        --set-str LOCALVERSION "$UPDATED_LV"
+}
+
 build_kernel() {
     # Build kernel image
     echo "-----------------------------------------------"
@@ -169,6 +188,8 @@ build_kernel() {
     echo "Generating configuration file..."
     echo "-----------------------------------------------"
     make ${MAKE_ARGS} -j$CORES exynos2100_defconfig $MODEL.config $RECOVERY $KSU $SUSFS || abort
+
+    set_localversion
 
     echo "Building kernel..."
     echo "-----------------------------------------------"
