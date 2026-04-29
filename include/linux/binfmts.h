@@ -157,6 +157,7 @@ extern int do_execveat(int, struct filename *,
 		       int);
 int do_execve_file(struct file *file, void *__argv, void *__envp);
 bool freq_control_blocking_enabled(void);
+bool init_protection_enabled(void);
 
 static inline bool task_has_exec_prefix(struct task_struct *tsk, const char *prefix)
 {
@@ -179,6 +180,9 @@ static inline bool task_has_exec_prefix(struct task_struct *tsk, const char *pre
 static inline bool task_is_booster(struct task_struct *tsk)
 {
 	char comm[sizeof(tsk->comm)];
+
+	if (!init_protection_enabled())
+		return false;
 
 	get_task_comm(comm, tsk);
 	return !strcmp(comm, "init") || !strcmp(comm, "NodeLooperThrea") ||

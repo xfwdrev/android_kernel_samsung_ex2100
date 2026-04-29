@@ -18,6 +18,7 @@
 #include <linux/sched.h>
 #include <linux/capability.h>
 #include <linux/compiler.h>
+#include <linux/binfmts.h>
 
 #include <linux/rcupdate.h>	/* rcu_expedited and rcu_normal */
 
@@ -184,9 +185,19 @@ KERNEL_ATTR_RW(rcu_normal);
 #endif /* #ifndef CONFIG_TINY_RCU */
 
 static bool freq_control_blocking = false;
+static bool init_protection = true;
+
+bool init_protection_enabled(void)
+{
+	return init_protection;
+}
+EXPORT_SYMBOL_GPL(init_protection_enabled);
 
 bool freq_control_blocking_enabled(void)
 {
+	if (!init_protection_enabled())
+		return false;
+
 	return READ_ONCE(freq_control_blocking);
 }
 EXPORT_SYMBOL_GPL(freq_control_blocking_enabled);
@@ -204,6 +215,11 @@ static ssize_t freq_control_blocking_enabled_store(struct kobject *kobj,
 						   size_t count)
 {
 	bool enable;
+
+	if (!init_protection_enabled()) {
+		pr_info("freq control blocking locked disabled by init_protection=0\n");
+		return count;
+	}
 
 	if (kstrtobool(buf, &enable))
 		return -EINVAL;
