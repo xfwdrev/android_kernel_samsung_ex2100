@@ -3465,7 +3465,7 @@ static void sec_bat_check_store_mode(struct sec_battery_info *battery)
 		return;
 
 	if (!is_nocharge_type(battery->cable_type) && !battery->charging_enabled) {
-		int chg_mode = SEC_BAT_CHG_MODE_CHARGING_OFF;
+		int chg_mode = SEC_BAT_CHG_MODE_BUCK_OFF;
 
 		pr_info("%s: capacity(%d), status(%d), charging_enabled(%d)\n",
 			 __func__, battery->capacity, battery->status, battery->charging_enabled);
@@ -3473,7 +3473,7 @@ static void sec_bat_check_store_mode(struct sec_battery_info *battery)
 		/* Keep bypass on when requested, with low-SOC safety fallback. */
 		if (battery->capacity > battery->pdata->store_mode_charging_max ||
 				battery->pdata->store_mode_buckoff)
-			chg_mode = SEC_BAT_CHG_MODE_BUCK_OFF;
+			chg_mode = SEC_BAT_CHG_MODE_CHARGING_OFF;
 
 		sec_bat_set_charging_status(battery, POWER_SUPPLY_STATUS_DISCHARGING);
 		sec_bat_set_charge(battery, chg_mode);
