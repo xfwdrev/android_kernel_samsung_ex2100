@@ -3473,7 +3473,7 @@ static void sec_bat_check_store_mode(struct sec_battery_info *battery)
 		/* Keep bypass on when requested, with low-SOC safety fallback. */
 		if (battery->capacity > battery->pdata->store_mode_charging_max ||
 				battery->pdata->store_mode_buckoff)
-			chg_mode = battery->misc_event & (BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE | BATT_MISC_EVENT_TEMP_HICCUP_TYPE) ? SEC_BAT_CHG_MODE_BUCK_OFF : SEC_BAT_CHG_MODE_CHARGING_OFF;
+			chg_mode = SEC_BAT_CHG_MODE_BUCK_OFF;
 
 		sec_bat_set_charging_status(battery, POWER_SUPPLY_STATUS_DISCHARGING);
 		sec_bat_set_charge(battery, chg_mode);
