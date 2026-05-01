@@ -1,6 +1,6 @@
-From 188d458ffe4e5ed3106bba65a1d7449facfefd0b Mon Sep 17 00:00:00 2001
-From: sidex15 <24408329+sidex15@users.noreply.github.com>
-Date: Wed, 15 Apr 2026 07:56:11 +0800
+From 379ddc1222833e5af481ddda3d690e479f00a23c Mon Sep 17 00:00:00 2001
+From: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
+Date: Fri, 1 May 2026 08:03:42 +0800
 Subject: [PATCH] Patch KSU Next enable SuSFS 2.1.0 with de-inlined hooks
 
 Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
@@ -15,14 +15,14 @@ Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
  kernel/selinux/selinux.c       | 96 +++++++++++++++++++++++++++++++++
  kernel/selinux/selinux.h       | 13 +++++
  kernel/supercall/dispatch.c    | 37 ++++++++++++-
- kernel/supercall/supercall.c   | 94 ++++++++++++++++++++++++++++++++
- 11 files changed, 477 insertions(+), 7 deletions(-)
+ kernel/supercall/supercall.c   | 96 ++++++++++++++++++++++++++++++++-
+ 11 files changed, 478 insertions(+), 8 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index 7b0cbdb8..4a586c89 100644
+index 8e8b78e5..2ffdcd6e 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
-@@ -297,4 +297,14 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
+@@ -300,4 +300,14 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
  ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
  ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
  
@@ -393,10 +393,10 @@ index c260cb73..4dde9094 100644
 +}
 \ No newline at end of file
 diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
-index bb1d01c1..649a8fb1 100644
+index 8f8eb679..7b9d7db4 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
-@@ -258,6 +258,14 @@ do_stop_machine:
+@@ -266,6 +266,14 @@ do_stop_machine:
  out_flush:
  	smp_mb();
  	reset_avc_cache();
@@ -631,7 +631,7 @@ index 6b9a117a..7b24c93f 100644
  	}
  	default: {
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index 1921ab64..938b2224 100644
+index 1921ab64..bcc18acb 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -11,6 +11,11 @@
@@ -646,7 +646,15 @@ index 1921ab64..938b2224 100644
  
  #include "uapi/supercall.h"
  #include "supercall/internal.h"
-@@ -79,6 +84,95 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+@@ -72,13 +77,102 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+ 			  void __user **arg)
+ {
+ 	if (magic1 != KSU_INSTALL_MAGIC1)
+-		return 0;
++		return -EINVAL;
+ 
+ #ifdef CONFIG_KSU_DEBUG
+ 	pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1,
  		magic2);
  #endif
  

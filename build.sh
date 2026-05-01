@@ -66,6 +66,15 @@ enable_susfs() {
         }
 }
 
+apply_reboot() {
+
+        echo "Applying reboot patch to KernelSU Next..."
+        patch -d "$PWD/KernelSU-Next" -p1 < "$PWD/patches/ksu-reboot.patch" || {
+            echo "Failed to apply reboot patch!"
+            exit 1
+        }
+}
+
 echo "Preparing the build environment..."
 
 pushd $(dirname "$0") > /dev/null
@@ -448,8 +457,12 @@ if [[ "$KSU_OPTION" == "y" ]]; then
 
     fetch_ksu
 
-    if [[ "$SUSFS_OPTION" == "y" ]]; then
+    if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
     enable_susfs
+    fi
+    
+    if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "n" ]]; then
+    apply_reboot
     fi
 
     if ! grep -Fxq "$KSU" "$KCONFIG_FILE"; then

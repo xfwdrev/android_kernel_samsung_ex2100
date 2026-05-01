@@ -1,0 +1,26 @@
+From c7c80e0fb42fdaf5a38e9031a01b73d8a3168487 Mon Sep 17 00:00:00 2001
+From: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
+Date: Fri, 1 May 2026 08:07:27 +0800
+Subject: [PATCH] Return handled KernelSU reboot supercalls early
+
+Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
+---
+ kernel/supercall/supercall.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
+index 1921ab64..11a79e9b 100644
+--- a/kernel/supercall/supercall.c
++++ b/kernel/supercall/supercall.c
+@@ -72,7 +72,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+ 			  void __user **arg)
+ {
+ 	if (magic1 != KSU_INSTALL_MAGIC1)
+-		return 0;
++		return -EINVAL;
+ 
+ #ifdef CONFIG_KSU_DEBUG
+ 	pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1,
+-- 
+2.43.0
+
