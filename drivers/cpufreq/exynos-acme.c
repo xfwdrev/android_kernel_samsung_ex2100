@@ -18,6 +18,8 @@
 #include <linux/cpufreq.h>
 #include <linux/tick.h>
 #include <linux/pm_opp.h>
+#include <linux/jump_label.h>
+#include <linux/kobject.h>
 #include <soc/samsung/cpu_cooling.h>
 #include <linux/suspend.h>
 #include <linux/platform_device.h>
@@ -41,6 +43,10 @@
  * list head of cpufreq domain
  */
 static LIST_HEAD(domains);
+static DEFINE_STATIC_KEY_FALSE(exynos_fc_clamp_key);
+static DEFINE_MUTEX(exynos_fc_lock);
+static unsigned int exynos_fc_clamp_count;
+static struct kobject *exynos_fc_kobj;
 
 /*
  * list head of units which have cpufreq policy dependancy
@@ -62,6 +68,52 @@ static struct exynos_cpufreq_domain *find_domain(unsigned int cpu)
 	return NULL;
 }
 
+static struct exynos_cpufreq_domain *find_domain_by_id(unsigned int id)
+{
+	struct exynos_cpufreq_domain *domain;
+
+	list_for_each_entry(domain, &domains, list)
+		if (domain->id == id)
+			return domain;
+
+	return NULL;
+}
+
+static unsigned int exynos_fc_resolve_clamp_freq(struct exynos_cpufreq_domain *domain,
+						 unsigned int freq)
+{
+	struct cpufreq_frequency_table *pos;
+	unsigned int best = 0;
+	unsigned int min_freq = UINT_MAX;
+
+	cpufreq_for_each_valid_entry(pos, domain->freq_table) {
+		if (pos->frequency <= freq && pos->frequency > best)
+			best = pos->frequency;
+		if (pos->frequency < min_freq)
+			min_freq = pos->frequency;
+	}
+
+	return best ? best : min_freq;
+}
+
+static unsigned int exynos_fc_limit_freq(struct exynos_cpufreq_domain *domain,
+					 unsigned int freq)
+{
+	unsigned int clamp_limit_freq;
+
+	if (!static_branch_unlikely(&exynos_fc_clamp_key))
+		return freq;
+
+	clamp_limit_freq = READ_ONCE(domain->clamp_limit_freq);
+	if (!clamp_limit_freq)
+		return freq;
+
+	if (freq > clamp_limit_freq)
+		return clamp_limit_freq;
+
+	return freq;
+}
+
 static void enable_domain(struct exynos_cpufreq_domain *domain)
 {
 	raw_spin_lock(&domain->lock);
@@ -78,9 +130,11 @@ static void disable_domain(struct exynos_cpufreq_domain *domain)
 
 static void update_dm_min_max(struct exynos_cpufreq_domain *domain)
 {
+	unsigned int max_freq = min(domain->max_freq_qos, domain->clipped_freq);
+
+	max_freq = exynos_fc_limit_freq(domain, max_freq);
 	policy_update_call_to_DM(domain->dm_type,
-			domain->min_freq_qos,
-			min(domain->max_freq_qos, domain->clipped_freq));
+			min(domain->min_freq_qos, max_freq), max_freq);
 }
 
 /*********************************************************************
@@ -198,7 +252,15 @@ static unsigned int exynos_cpufreq_resolve_freq(struct cpufreq_policy *policy,
 		return 0;
 	}
 
-	return policy->freq_table[index].frequency;
+	target_freq = policy->freq_table[index].frequency;
+	if (static_branch_unlikely(&exynos_fc_clamp_key)) {
+		struct exynos_cpufreq_domain *domain = find_domain(policy->cpu);
+
+		if (domain)
+			target_freq = exynos_fc_limit_freq(domain, target_freq);
+	}
+
+	return target_freq;
 }
 
 static int exynos_cpufreq_online(struct cpufreq_policy *policy)
@@ -263,6 +325,7 @@ static int exynos_cpufreq_verify(struct cpufreq_policy_data *new_policy)
 		return -EINVAL;
 	}
 	max_freq = policy.freq_table[index].frequency;
+	max_freq = exynos_fc_limit_freq(domain, max_freq);
 
 	index = cpufreq_table_find_index_al(&policy, new_policy->min);
 	if (index == -1) {
@@ -270,6 +333,8 @@ static int exynos_cpufreq_verify(struct cpufreq_policy_data *new_policy)
 		return -EINVAL;
 	}
 	min_freq = policy.freq_table[index].frequency;
+	if (min_freq > max_freq)
+		min_freq = max_freq;
 
 	new_policy->max = domain->max_freq_qos = max_freq;
 	new_policy->min = domain->min_freq_qos = min_freq;
@@ -300,6 +365,7 @@ static int __exynos_cpufreq_target(struct cpufreq_policy *policy,
 	}
 
 	target_freq = cpufreq_driver_resolve_freq(policy, target_freq);
+	target_freq = exynos_fc_limit_freq(domain, target_freq);
 	target_freq = min(target_freq, domain->clipped_freq);
 
 	/* Target is same as current, skip scaling */
@@ -360,6 +426,7 @@ static int exynos_cpufreq_target(struct cpufreq_policy *policy,
 	}
 
 	freq = (unsigned long)target_freq;
+	freq = exynos_fc_limit_freq(domain, freq);
 
 	if (policy->cpu >= 4 &&
 	    (target_freq >= 2080000 || domain->old >= 2080000))
@@ -374,9 +441,13 @@ out:
 static unsigned int exynos_cpufreq_fast_switch(struct cpufreq_policy *policy,
 					       unsigned int target_freq)
 {
+	struct exynos_cpufreq_domain *domain = find_domain(policy->cpu);
 	int ret = __exynos_cpufreq_target(policy, target_freq, CPUFREQ_RELATION_L, true);
 
-	return ret ? 0 : target_freq;
+	if (ret || !domain)
+		return 0;
+
+	return READ_ONCE(domain->old);
 }
 
 static unsigned int exynos_cpufreq_get(unsigned int cpu)
@@ -387,6 +458,23 @@ static unsigned int exynos_cpufreq_get(unsigned int cpu)
 		return 0;
 
 	return get_freq(domain);
+}
+
+static void exynos_fc_refresh_domain(struct exynos_cpufreq_domain *domain)
+{
+	struct cpufreq_policy *policy;
+	unsigned int cpu = cpumask_first(&domain->cpus);
+
+	cpufreq_update_policy(cpu);
+
+	policy = cpufreq_cpu_get(cpu);
+	if (!policy)
+		return;
+
+	if (domain->old > exynos_fc_limit_freq(domain, domain->old))
+		exynos_cpufreq_target(policy, domain->old, CPUFREQ_RELATION_H);
+
+	cpufreq_cpu_put(policy);
 }
 
 static int __exynos_cpufreq_suspend(struct cpufreq_policy *policy,
@@ -621,6 +709,113 @@ static struct kobj_type ktype_acme = {
 	.sysfs_ops	= &acme_sysfs_ops,
 	.default_attrs	= acme_attrs,
 };
+
+struct exynos_fc_attr {
+	struct kobj_attribute attr;
+	unsigned int cluster;
+};
+
+static ssize_t exynos_fc_clamp_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	struct exynos_fc_attr *fc_attr =
+		container_of(attr, struct exynos_fc_attr, attr);
+	struct exynos_cpufreq_domain *domain = find_domain_by_id(fc_attr->cluster);
+
+	if (!domain)
+		return -ENODEV;
+
+	return snprintf(buf, 30, "%u\n", READ_ONCE(domain->clamp_freq));
+}
+
+static ssize_t exynos_fc_clamp_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct exynos_fc_attr *fc_attr =
+		container_of(attr, struct exynos_fc_attr, attr);
+	struct exynos_cpufreq_domain *domain = find_domain_by_id(fc_attr->cluster);
+	unsigned int old_freq;
+	unsigned int freq;
+	int ret;
+
+	if (!domain)
+		return -ENODEV;
+
+	ret = kstrtouint(buf, 0, &freq);
+	if (ret)
+		return ret;
+
+	mutex_lock(&exynos_fc_lock);
+
+	old_freq = domain->clamp_freq;
+	if (old_freq == freq) {
+		mutex_unlock(&exynos_fc_lock);
+		return count;
+	}
+
+	WRITE_ONCE(domain->clamp_freq, freq);
+	WRITE_ONCE(domain->clamp_limit_freq,
+		   freq ? exynos_fc_resolve_clamp_freq(domain, freq) : 0);
+
+	if (!old_freq && freq) {
+		exynos_fc_clamp_count++;
+		if (exynos_fc_clamp_count == 1)
+			static_branch_enable(&exynos_fc_clamp_key);
+	} else if (old_freq && !freq) {
+		exynos_fc_clamp_count--;
+		if (!exynos_fc_clamp_count)
+			static_branch_disable(&exynos_fc_clamp_key);
+	}
+
+	mutex_unlock(&exynos_fc_lock);
+
+	exynos_fc_refresh_domain(domain);
+
+	return count;
+}
+
+static struct exynos_fc_attr exynos_fc_cpucl0_clamp_attr = {
+	.attr = __ATTR(cpucl0_clamp, 0644,
+		       exynos_fc_clamp_show, exynos_fc_clamp_store),
+	.cluster = 0,
+};
+
+static struct exynos_fc_attr exynos_fc_cpucl1_clamp_attr = {
+	.attr = __ATTR(cpucl1_clamp, 0644,
+		       exynos_fc_clamp_show, exynos_fc_clamp_store),
+	.cluster = 1,
+};
+
+static struct exynos_fc_attr exynos_fc_cpucl2_clamp_attr = {
+	.attr = __ATTR(cpucl2_clamp, 0644,
+		       exynos_fc_clamp_show, exynos_fc_clamp_store),
+	.cluster = 2,
+};
+
+static const struct attribute * const exynos_fc_attrs[] = {
+	&exynos_fc_cpucl0_clamp_attr.attr.attr,
+	&exynos_fc_cpucl1_clamp_attr.attr.attr,
+	&exynos_fc_cpucl2_clamp_attr.attr.attr,
+	NULL,
+};
+
+static int init_exynos_fc_sysfs(void)
+{
+	int ret;
+
+	exynos_fc_kobj = kobject_create_and_add("exynos_fc", kernel_kobj);
+	if (!exynos_fc_kobj)
+		return -ENOMEM;
+
+	ret = sysfs_create_files(exynos_fc_kobj, exynos_fc_attrs);
+	if (ret) {
+		kobject_put(exynos_fc_kobj);
+		exynos_fc_kobj = NULL;
+	}
+
+	return ret;
+}
 
 /*********************************************************************
  *                       CPUFREQ DEV FOPS                            *
@@ -1469,6 +1664,9 @@ static int exynos_cpufreq_probe(struct platform_device *pdev)
 	 * 4. register notifier bloack
 	 */
 	init_sysfs(&pdev->dev.kobj);
+	ret = init_exynos_fc_sysfs();
+	if (ret)
+		pr_err("failed to init exynos_fc sysfs with err %d\n", ret);
 
 	list_for_each_entry(domain, &domains, list) {
 		struct cpufreq_policy *policy;
