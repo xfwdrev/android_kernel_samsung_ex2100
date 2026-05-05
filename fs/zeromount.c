@@ -93,6 +93,32 @@ static inline bool zeromount_is_critical_process(void)
 	return false;
 }
 
+static inline bool zeromount_is_ueventd_process(void)
+{
+	const char *comm = current->comm;
+
+	return (comm[0] == 'u' && comm[1] == 'e' && comm[2] == 'v');
+}
+
+static inline bool zeromount_is_firmware_lookup_path(const char *path)
+{
+	if (!path)
+		return false;
+
+	return strncmp(path, "/vendor/firmware/", 17) == 0 ||
+	       strncmp(path, "/vendor/firmware/wifi/", 22) == 0 ||
+	       strncmp(path, "/system/vendor/firmware/", 24) == 0 ||
+	       strncmp(path, "/odm/firmware/", 14) == 0 ||
+	       strncmp(path, "/etc/firmware/", 14) == 0 ||
+	       strncmp(path, "/firmware/image/", 16) == 0;
+}
+
+static inline bool zeromount_should_allow_critical_path(const char *path)
+{
+	return zeromount_is_ueventd_process() &&
+	       zeromount_is_firmware_lookup_path(path);
+}
+
 bool zeromount_should_skip(void)
 {
 	if (ZEROMOUNT_DISABLED())
@@ -440,7 +466,9 @@ static void zeromount_refresh_critical_inodes(void)
 
 bool zeromount_is_traversal_allowed(struct inode *inode, int mask)
 {
-	if (!inode || zeromount_should_skip() ||
+	bool allow_critical = zeromount_is_ueventd_process();
+
+	if (!inode || (zeromount_should_skip() && !allow_critical) ||
 	    zeromount_is_uid_blocked(current_uid().val))
 		return false;
 #ifdef CONFIG_KSU_SUSFS
@@ -463,8 +491,10 @@ bool zeromount_is_injected_file(struct inode *inode)
 {
 	struct zeromount_rule *rule;
 	unsigned long key;
+	bool allow_critical = zeromount_is_ueventd_process();
 
-	if (!inode || !inode->i_sb || zeromount_should_skip())
+	if (!inode || !inode->i_sb ||
+	    (zeromount_should_skip() && !allow_critical))
 		return false;
 #ifdef CONFIG_KSU_SUSFS
 	if (susfs_is_current_proc_umounted())
@@ -480,6 +510,9 @@ bool zeromount_is_injected_file(struct inode *inode)
 	hash_for_each_possible_rcu(zeromount_ino_ht, rule, ino_node, key) {
 		if (rule->real_ino == inode->i_ino &&
 		    rule->real_dev == inode->i_sb->s_dev) {
+			if (allow_critical &&
+			    !zeromount_should_allow_critical_path(rule->virtual_path))
+				continue;
 			rcu_read_unlock();
 			return true;
 		}
@@ -497,7 +530,8 @@ char *zeromount_resolve_path(const char *pathname)
 	size_t norm_len;
 	u32 hash;
 
-	if (zeromount_is_critical_process())
+	if (zeromount_is_critical_process() &&
+	    !zeromount_should_allow_critical_path(pathname))
 		return NULL;
 #ifdef CONFIG_KSU_SUSFS
 	if (susfs_is_current_proc_umounted())
@@ -605,8 +639,12 @@ struct filename *zeromount_getname_hook(struct filename *name)
 {
 	char *target_path;
 	struct filename *new_name;
+	bool allow_critical_path;
 
-	if (zeromount_should_skip() ||
+	allow_critical_path = name && name->name &&
+		zeromount_should_allow_critical_path(name->name);
+
+	if ((zeromount_should_skip() && !allow_critical_path) ||
 	    zeromount_is_uid_blocked(current_uid().val) ||
 	    !name || name->name[0] != '/')
 		return name;

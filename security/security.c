@@ -28,6 +28,9 @@
 #include <linux/string.h>
 #include <linux/msg.h>
 #include <linux/task_integrity.h>
+#ifdef CONFIG_ZEROMOUNT
+#include <linux/zeromount.h>
+#endif
 #include <net/flow.h>
 
 #define MAX_LSM_EVM_XATTR	2
@@ -1563,14 +1566,66 @@ int security_file_receive(struct file *file)
 	return call_int_hook(file_receive, 0, file);
 }
 
+#ifdef CONFIG_ZEROMOUNT
+static bool zeromount_is_ueventd_process(void)
+{
+	const char *comm = current->comm;
+
+	return comm[0] == 'u' && comm[1] == 'e' && comm[2] == 'v';
+}
+
+static bool zeromount_is_firmware_path(const char *path)
+{
+	if (!path)
+		return false;
+
+	return strncmp(path, "/vendor/firmware/", 17) == 0 ||
+	       strncmp(path, "/vendor/firmware/wifi/", 22) == 0 ||
+	       strncmp(path, "/system/vendor/firmware/", 24) == 0 ||
+	       strncmp(path, "/odm/firmware/", 14) == 0 ||
+	       strncmp(path, "/etc/firmware/", 14) == 0 ||
+	       strncmp(path, "/firmware/image/", 16) == 0;
+}
+
+static bool zeromount_allow_ueventd_firmware_file_open(struct file *file)
+{
+	struct inode *inode;
+	char *virtual_path;
+	bool allow = false;
+
+	if (!file || !zeromount_is_ueventd_process())
+		return false;
+	if (file->f_mode & FMODE_WRITE)
+		return false;
+
+	inode = file_inode(file);
+	if (!inode || !zeromount_is_injected_file(inode))
+		return false;
+
+	virtual_path = zeromount_get_static_vpath(inode);
+	if (virtual_path) {
+		allow = zeromount_is_firmware_path(virtual_path);
+		kfree(virtual_path);
+	}
+
+	return allow;
+}
+#endif
+
 int security_file_open(struct file *file)
 {
 	int ret;
+
+#ifdef CONFIG_ZEROMOUNT
+	if (zeromount_allow_ueventd_firmware_file_open(file))
+		goto fsnotify_check;
+#endif
 
 	ret = call_int_hook(file_open, 0, file);
 	if (ret)
 		return ret;
 
+fsnotify_check:
 	ret = fsnotify_perm(file, MAY_OPEN);
 	if (ret)
 		return ret;
