@@ -158,6 +158,8 @@ set_localversion() {
         LV_SUFFIX="-KSUN-SUSFS"
     elif [[ "$KSU_OPTION" == "y" ]]; then
         LV_SUFFIX="-KSUN"
+    else
+        LV_SUFFIX="-VANILLA"
     fi
 
     UPDATED_LV="${BASE_LV}${LV_SUFFIX}"
