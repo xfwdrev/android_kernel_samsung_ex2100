@@ -1,6 +1,6 @@
-From 6823ae9065ef753d1b81c0b8db820ba633403e5f Mon Sep 17 00:00:00 2001
+From bdec99d58a7b9c01a3b9868b7036432207d1e85c Mon Sep 17 00:00:00 2001
 From: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
-Date: Mon, 4 May 2026 09:01:01 +0800
+Date: Thu, 7 May 2026 12:22:00 +0800
 Subject: [PATCH] Patch KSU Next enable SuSFS 2.1.0 with de-inlined hooks
 
 Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
@@ -15,8 +15,8 @@ Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
  kernel/selinux/selinux.c       | 96 +++++++++++++++++++++++++++++++++
  kernel/selinux/selinux.h       | 13 +++++
  kernel/supercall/dispatch.c    | 37 ++++++++++++-
- kernel/supercall/supercall.c   | 96 ++++++++++++++++++++++++++++++++-
- 11 files changed, 473 insertions(+), 8 deletions(-)
+ kernel/supercall/supercall.c   | 94 ++++++++++++++++++++++++++++++++
+ 11 files changed, 472 insertions(+), 7 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
 index 8e8b78e5..2ffdcd6e 100644
@@ -625,7 +625,7 @@ index 6b9a117a..7b24c93f 100644
  	}
  	default: {
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index 1921ab64..bcc18acb 100644
+index 1921ab64..938b2224 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -11,6 +11,11 @@
@@ -640,15 +640,7 @@ index 1921ab64..bcc18acb 100644
  
  #include "uapi/supercall.h"
  #include "supercall/internal.h"
-@@ -72,13 +77,102 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
- 			  void __user **arg)
- {
- 	if (magic1 != KSU_INSTALL_MAGIC1)
--		return 0;
-+		return -EINVAL;
- 
- #ifdef CONFIG_KSU_DEBUG
- 	pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1,
+@@ -79,6 +84,95 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
  		magic2);
  #endif
  
