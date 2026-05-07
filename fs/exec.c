@@ -1312,13 +1312,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	 * Release all of the old mmap stuff
 	 */
 	acct_arg_size(bprm, 0);
-#ifdef CONFIG_KDP_NS
-	/*
-	if (kdp_enable && is_kdp_priv_task() && invalid_drive(bprm)) {
-		panic("[KDP] Illegal Execution of file #%s#\n", bprm->filename);
-	}
-	*/
-#endif
+
 	retval = exec_mmap(bprm->mm);
 	if (retval)
 		goto out;
