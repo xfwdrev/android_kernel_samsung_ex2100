@@ -146,7 +146,7 @@ if [[ "$RECOVERY_OPTION" == "y" ]]; then
     SUSFS_OPTION=n
 fi
 
-if [ -z $KSU_OPTION ]; then
+if [ -z "$KSU_OPTION" ]; then
     read -p "Include KernelSU (y/N): " KSU_OPTION
 fi
 
