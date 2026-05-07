@@ -46,33 +46,48 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-fetch_ksu() {
-
-    rm -rf "$PWD/KernelSU-Next"
-
-        echo "Fetching latest KernelSU Next"
-        git submodule update --init --recursive || {
-            echo "Failed to initialize KSU Next submodule!"
-            exit 1
-        }
-}
-
 enable_susfs() {
 
-        echo "Applying SuSFS patch to KernelSU Next..."
+    KSUN_DIR="$PWD/KernelSU-Next/kernel"
+    SUS_MARKER="config KSU_SUSFS"
+
+    if [[ "$SUSFS_OPTION" == "y" ]]; then
+
+        if grep -q "$SUS_MARKER" "$KSUN_DIR/Kconfig" 2>/dev/null; then
+            echo "SuSFS already enabled, skipping patch."
+            return
+        fi
+
+        echo "Applying SuSFS patch..."
+
         patch -d "$PWD/KernelSU-Next" -p1 < "$PWD/patches/enable-susfs.patch" || {
             echo "Failed to apply SuSFS patch!"
             exit 1
         }
+
+    else
+        echo "Disabling SuSFS..."
+
+        patch -R -N -d "$PWD/KernelSU-Next" -p1 < "$PWD/patches/enable-susfs.patch"
+    fi
 }
 
 apply_reboot() {
 
-        echo "Applying reboot patch to KernelSU Next..."
-        patch -d "$PWD/KernelSU-Next" -p1 < "$PWD/patches/ksu-reboot.patch" || {
-            echo "Failed to apply reboot patch!"
-            exit 1
-        }
+    KSUN_DIR="$PWD/KernelSU-Next/kernel"
+
+    if grep -q "magic1 != KSU_INSTALL_MAGIC1" "$KSUN_DIR/supercall/supercall.c" && \
+       grep -q "return -EINVAL" "$KSUN_DIR/supercall/supercall.c"; then
+        echo "Reboot patch already applied, skipping..."
+        return
+    fi
+
+    echo "Applying reboot patch to KernelSU Next..."
+
+    patch -d "$PWD/KernelSU-Next" -p1 < "$PWD/patches/ksu-reboot.patch" || {
+        echo "Failed to apply reboot patch!"
+        exit 1
+    }
 }
 
 echo "Preparing the build environment..."
@@ -451,36 +466,21 @@ build_zip() {
 }
 
 KCONFIG_FILE="drivers/Kconfig"
-KSU='source "drivers/kernelsu/Kconfig"'
-MAKEFILE="drivers/Makefile"
-MAKEFILE_LINE='obj-$(CONFIG_KSU) += kernelsu/'
+KSU_VAR='source "drivers/kernelsu/Kconfig"'
 
-if [[ "$KSU_OPTION" == "y" ]]; then
+if [[ "$KSU_OPTION" != "y" ]]; then
 
-    fetch_ksu
-
-    if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
-    enable_susfs
-    fi
-    
-    if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "n" ]]; then
-    apply_reboot
-    fi
-
-    if ! grep -Fxq "$KSU" "$KCONFIG_FILE"; then
-        sed -i "\|endmenu|i $KSU" "$KCONFIG_FILE"
-    fi
-
-    if ! grep -Fxq "$MAKEFILE_LINE" "$MAKEFILE"; then
-        echo "$MAKEFILE_LINE" >> "$MAKEFILE"
-    fi
+    sed -i "\|$KSU_VAR|d" "$KCONFIG_FILE"
 
 else
 
-    fetch_ksu
+    apply_reboot
+    enable_susfs
     
-    sed -i "\|$KSU|d" "$KCONFIG_FILE"
-    sed -i "\|$MAKEFILE_LINE|d" "$MAKEFILE"
+    if ! grep -Fxq "$KSU_VAR" "$KCONFIG_FILE"; then
+        sed -i "\|endmenu|i $KSU_VAR" "$KCONFIG_FILE"
+    fi
+
 fi
 
 build_kernel
