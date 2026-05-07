@@ -68,6 +68,7 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 0
+        submodules: recursive
 
     - name: Update apt
       run: sudo apt-get update
