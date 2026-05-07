@@ -357,9 +357,6 @@ static int is_resourcemgr_allocmem(struct is_resourcemgr *resourcemgr)
 static struct is_resource_rmem crmem;
 
 #ifndef MODULE
-#ifdef CONFIG_RKP
-static struct vm_struct is_lib_vm_for_rkp;
-#endif
 static int __init is_reserved_mem_setup(struct reserved_mem *remem)
 {
 	crmem.phys_addr = remem->base;
@@ -811,10 +808,6 @@ static int __init is_reserved_mem_setup(struct reserved_mem *rmem)
 	const __be32 *prop;
 	u64 kbase;
 	int len;
-#ifdef CONFIG_RKP
-	struct rkp_dynamic_load rkp_dyn;
-	int ret = 0;
-#endif
 
 	prop = of_get_flat_dt_prop(rmem->fdt_node, "kernel_virt", &len);
 	if (!prop) {
@@ -836,23 +829,7 @@ static int __init is_reserved_mem_setup(struct reserved_mem *rmem)
 
 	BUG_ON(rmem->size < LIB_SIZE);
 
-#ifdef CONFIG_RKP
-	memcpy(&is_lib_vm_for_rkp, &is_lib_vm, sizeof(struct vm_struct));
-
-	is_lib_vm_for_rkp.addr = (void *)rounddown((u64)is_lib_vm_for_rkp.addr, SECTION_SIZE);
-	is_lib_vm_for_rkp.size = (u64)roundup(is_lib_vm_for_rkp.size, SECTION_SIZE);
-
-	rkp_dyn.binary_base = is_lib_vm.phys_addr;
-	rkp_dyn.binary_size = LIB_SIZE;
-	rkp_dyn.type = RKP_DYN_COMMAND_BREAKDOWN;
-	uh_call2(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_BREAKDOWN, (u64)&rkp_dyn, (u64)&ret, 0);
-	if (ret) {
-		err_lib("fail to break-before-init FIMC in EL2");
-	}
-	vm_area_add_early(&is_lib_vm_for_rkp);
-#else
 	vm_area_add_early(&is_lib_vm);
-#endif
 
 	probe_info("is library memory: 0x%llx\n", kbase);
 
@@ -875,10 +852,6 @@ RESERVEDMEM_OF_DECLARE(is_lib, "exynos,is_lib", is_reserved_mem_setup);
 static int __init is_lib_mem_alloc(char *str)
 {
 	ulong addr = 0;
-#ifdef CONFIG_RKP
-	struct rkp_dynamic_load rkp_dyn;
-	int ret = 0;
-#endif
 
 	if (kstrtoul(str, 0, (ulong *)&addr) || !addr) {
 		probe_warn("invalid is library memory address, use default");
@@ -892,23 +865,7 @@ static int __init is_lib_mem_alloc(char *str)
 	is_lib_vm.phys_addr = is_memblock_alloc(LIB_SIZE, SZ_2M);
 	is_lib_vm.addr = (void *)addr;
 	is_lib_vm.size = LIB_SIZE + PAGE_SIZE;
-#ifdef CONFIG_RKP
-	memcpy(&is_lib_vm_for_rkp, &is_lib_vm, sizeof(struct vm_struct));
-
-	is_lib_vm_for_rkp.addr = (void *)rounddown((u64)is_lib_vm_for_rkp.addr, SECTION_SIZE);
-	is_lib_vm_for_rkp.size = (u64)roundup(is_lib_vm_for_rkp.size, SECTION_SIZE);
-
-	rkp_dyn.binary_base = is_lib_vm.phys_addr;
-	rkp_dyn.binary_size = LIB_SIZE;
-	rkp_dyn.type = RKP_DYN_COMMAND_BREAKDOWN;
-	uh_call2(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_BREAKDOWN, (u64)&rkp_dyn, (u64)&ret, 0);
-	if (ret) {
-		err_lib("fail to break-before-init FIMC in EL2");
-	}
-	vm_area_add_early(&is_lib_vm_for_rkp);
-#else
 	vm_area_add_early(&is_lib_vm);
-#endif
 
 	probe_info("is library memory: 0x%lx\n", addr);
 

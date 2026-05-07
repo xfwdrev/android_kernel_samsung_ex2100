@@ -29,9 +29,6 @@
 #include "../is-device-ischain.h"
 #include "is-vender.h"
 #include "votf/camerapp-votf.h"
-#ifdef CONFIG_RKP
-#include <linux/rkp.h>
-#endif
 #if IS_ENABLED(CONFIG_EXYNOS_MEMORY_LOGGER)
 #include <soc/samsung/memlogger.h>
 #endif
@@ -2960,30 +2957,18 @@ int __nocfi is_load_ddk_bin(int loadType)
 	struct device *device = &gPtr_lib_support.pdev->dev;
 	/* fixup the memory attribute for every region */
 	ulong lib_addr;
-#ifdef CONFIG_RKP
-	struct rkp_dynamic_load rkp_dyn;
-	static struct rkp_dynamic_load rkp_dyn_before = {0};
-#endif
 	ulong lib_isp = DDK_LIB_ADDR;
 #ifdef USE_ONE_BINARY
 	size_t bin_size = VRA_LIB_SIZE + DDK_LIB_SIZE;
 #else
 	size_t bin_size = DDK_LIB_SIZE;
 #endif
-#ifdef CONFIG_RKP
-	ulong lib_vra = VRA_LIB_ADDR;
-	struct is_memory_attribute memory_attribute[] = {
-		{__pgprot(PTE_RDONLY), PFN_UP(LIB_VRA_CODE_SIZE), lib_vra},
-		{__pgprot(PTE_RDONLY), PFN_UP(LIB_ISP_CODE_SIZE), lib_isp}
-	};
-#else
 #ifndef CONFIG_DISABLE_CAMERA_MEM_ATTR
 	ulong lib_vra = VRA_LIB_ADDR;
 	struct is_memory_attribute memory_attribute[] = {
 		{__pgprot(PTE_RDONLY), PFN_UP(LIB_VRA_CODE_SIZE), lib_vra},
 		{__pgprot(PTE_RDONLY), PFN_UP(LIB_ISP_CODE_SIZE), lib_isp}
 	};
-#endif
 #endif
 #if defined(ENABLE_DYNAMIC_HEAP_FOR_DDK_RTA)
 	struct is_core *core = (struct is_core *)dev_get_drvdata(device);
@@ -3021,23 +3006,6 @@ int __nocfi is_load_ddk_bin(int loadType)
 #endif
 
 	if (loadType == BINARY_LOAD_ALL) {
-#ifdef CONFIG_RKP
-		memset(&rkp_dyn, 0, sizeof(rkp_dyn));
-		rkp_dyn.binary_base = lib_addr;
-		rkp_dyn.binary_size = bin.size;
-		rkp_dyn.code_base1 = memory_attribute[INDEX_ISP_BIN].vaddr;
-		rkp_dyn.code_size1 = memory_attribute[INDEX_ISP_BIN].numpages * PAGE_SIZE;
-#ifdef USE_ONE_BINARY
-		rkp_dyn.type = RKP_DYN_FIMC_COMBINED;
-		rkp_dyn.code_base2 = memory_attribute[INDEX_VRA_BIN].vaddr;
-		rkp_dyn.code_size2 = memory_attribute[INDEX_VRA_BIN].numpages * PAGE_SIZE;
-#else
-		rkp_dyn.type = RKP_DYN_FIMC;
-#endif
-		if (rkp_dyn_before.type)
-			uh_call2(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_RM, (u64)&rkp_dyn_before, 0, 0);
-		memcpy(&rkp_dyn_before, &rkp_dyn, sizeof(rkp_dyn));
-#endif
 #ifndef CONFIG_DISABLE_CAMERA_MEM_ATTR
 		ret = is_memory_attribute_nxrw(&memory_attribute[INDEX_ISP_BIN]);
 		if (ret) {
@@ -3068,12 +3036,6 @@ int __nocfi is_load_ddk_bin(int loadType)
 			goto fail;
 		}
 
-#ifdef CONFIG_RKP
-		uh_call2(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_INS, (u64)&rkp_dyn, (u64)&ret, 0);
-		if (ret) {
-			err_lib("fail to load verify FIMC in EL2");
-		}
-#else
 #ifndef CONFIG_DISABLE_CAMERA_MEM_ATTR
 		ret = is_memory_attribute_rox(&memory_attribute[INDEX_ISP_BIN]);
 		if (ret) {
@@ -3087,7 +3049,6 @@ int __nocfi is_load_ddk_bin(int loadType)
 			err_lib("failed to change into EX memory attribute (%d)", ret);
 			return ret;
 		}
-#endif
 #endif
 #endif
 	} else { /* loadType == BINARY_LOAD_DATA */
@@ -3234,16 +3195,9 @@ int __nocfi is_load_rta_bin(int loadType)
 	struct device *device = &gPtr_lib_support.pdev->dev;
 	os_system_func_t os_system_funcs[100];
 	ulong lib_rta = RTA_LIB_ADDR;
-#ifdef CONFIG_RKP
-	struct rkp_dynamic_load rkp_dyn;
-	static struct rkp_dynamic_load rkp_dyn_before = {0};
-	struct is_memory_attribute rta_memory_attribute = {
-		__pgprot(PTE_RDONLY), PFN_UP(LIB_RTA_CODE_SIZE), lib_rta};
-#else
 #ifndef CONFIG_DISABLE_CAMERA_MEM_ATTR
 	struct is_memory_attribute rta_memory_attribute = {
 		__pgprot(PTE_RDONLY), PFN_UP(LIB_RTA_CODE_SIZE), lib_rta};
-#endif
 #endif
 #if defined(ENABLE_DYNAMIC_HEAP_FOR_DDK_RTA)
 	struct is_core *core = (struct is_core *)dev_get_drvdata(device);
@@ -3266,17 +3220,6 @@ int __nocfi is_load_rta_bin(int loadType)
 	}
 
 	if (loadType == BINARY_LOAD_ALL) {
-#ifdef CONFIG_RKP
-		memset(&rkp_dyn, 0, sizeof(rkp_dyn));
-		rkp_dyn.binary_base = lib_rta;
-		rkp_dyn.binary_size = bin.size;
-		rkp_dyn.code_base1 = rta_memory_attribute.vaddr;
-		rkp_dyn.code_size1 = rta_memory_attribute.numpages * PAGE_SIZE;
-		rkp_dyn.type = RKP_DYN_FIMC;
-		if (rkp_dyn_before.type)
-			uh_call2(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_RM, (u64)&rkp_dyn_before, 0, 0);
-		memcpy(&rkp_dyn_before, &rkp_dyn, sizeof(rkp_dyn));
-#endif
 #ifndef CONFIG_DISABLE_CAMERA_MEM_ATTR
 		ret = is_memory_attribute_nxrw(&rta_memory_attribute);
 		if (ret) {
@@ -3297,19 +3240,12 @@ int __nocfi is_load_rta_bin(int loadType)
 			ret = -EBADF;
 			goto fail;
 		}
-#ifdef CONFIG_RKP
-		uh_call2(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_INS, (u64)&rkp_dyn, (u64)&ret, 0);
-		if (ret) {
-			err_lib("fail to load verify FIMC in EL2");
-		}
-#else
 #ifndef CONFIG_DISABLE_CAMERA_MEM_ATTR
 		ret = is_memory_attribute_rox(&rta_memory_attribute);
 		if (ret) {
 			err_lib("failed to change into EX memory attribute (%d)", ret);
 			return ret;
 		}
-#endif
 #endif
 
 	} else { /* loadType == BINARY_LOAD_DATA */
