@@ -203,8 +203,6 @@ obj-y				+= samsung/
 # uH
 obj-$(CONFIG_UH)		+= uh/
 
-obj-y				+= knox/
-
 #Sensor
 obj-$(CONFIG_SENSORS)		+= sensors/
 
