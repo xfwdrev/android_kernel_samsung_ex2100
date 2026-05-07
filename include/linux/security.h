@@ -77,6 +77,8 @@ enum lsm_event {
 	LSM_POLICY_CHANGE,
 };
 
+#define security_integrity_current()  0
+
 /*
  * These are reasons that can be passed to the security_locked_down()
  * LSM hook. Lockdown reasons that protect kernel integrity (ie, the

@@ -13,7 +13,6 @@
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/syscalls.h>
-#include <linux/task_integrity.h>
 
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
@@ -212,10 +211,6 @@ static ssize_t process_vm_rw_core(pid_t pid, struct iov_iter *iter,
 			rc = -EPERM;
 		goto put_task_struct;
 	}
-
-	rc = five_process_vm_rw(task, vm_write);
-	if (rc)
-		goto put_task_struct;
 
 	for (i = 0; i < riovcnt && iov_iter_count(iter) && !rc; i++)
 		rc = process_vm_rw_single_vec(
