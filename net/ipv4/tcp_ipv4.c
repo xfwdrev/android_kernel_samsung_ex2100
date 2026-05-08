@@ -3022,7 +3022,7 @@ static int __net_init tcp_sk_init(struct net *net)
 
 	net->ipv4.sysctl_tcp_syn_retries = TCP_SYN_RETRIES;
 	net->ipv4.sysctl_tcp_synack_retries = TCP_SYNACK_RETRIES;
-	net->ipv4.sysctl_tcp_syncookies = 0;
+	net->ipv4.sysctl_tcp_syncookies = 1;
 	net->ipv4.sysctl_tcp_reordering = TCP_FASTRETRANS_THRESH;
 	net->ipv4.sysctl_tcp_retries1 = TCP_RETR1;
 	net->ipv4.sysctl_tcp_retries2 = TCP_RETR2;
@@ -3039,7 +3039,7 @@ static int __net_init tcp_sk_init(struct net *net)
 	net->ipv4.sysctl_max_syn_backlog = max(128, cnt / 128);
 	net->ipv4.sysctl_tcp_sack = 1;
 	net->ipv4.sysctl_tcp_window_scaling = 1;
-	net->ipv4.sysctl_tcp_timestamps = 0;
+	net->ipv4.sysctl_tcp_timestamps = 1;
 	net->ipv4.sysctl_tcp_early_retrans = 3;
 	net->ipv4.sysctl_tcp_recovery = TCP_RACK_LOSS_DETECTION;
 	net->ipv4.sysctl_tcp_slow_start_after_idle = 1; /* By default, RFC2861 behavior.  */
@@ -3075,11 +3075,7 @@ static int __net_init tcp_sk_init(struct net *net)
 	}
 	net->ipv4.sysctl_tcp_comp_sack_delay_ns = NSEC_PER_MSEC;
 	net->ipv4.sysctl_tcp_comp_sack_nr = 44;
-	net->ipv4.sysctl_tcp_fastopen = TFO_CLIENT_ENABLE |
-					TFO_SERVER_ENABLE |
-					TFO_CLIENT_NO_COOKIE |
-					TFO_SERVER_COOKIE_NOT_REQD |
-					TFO_SERVER_WO_SOCKOPT1;
+	net->ipv4.sysctl_tcp_fastopen = TFO_CLIENT_ENABLE;
 	spin_lock_init(&net->ipv4.tcp_fastopen_ctx_lock);
 	net->ipv4.sysctl_tcp_fastopen_blackhole_timeout = 60 * 60;
 	atomic_set(&net->ipv4.tfo_active_disable_times, 0);

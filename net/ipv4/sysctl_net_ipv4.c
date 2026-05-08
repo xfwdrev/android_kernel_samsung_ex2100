@@ -1158,7 +1158,7 @@ static struct ctl_table ipv4_net_table[] = {
 		.procname	= "tcp_limit_output_bytes",
 		.data		= &init_net.ipv4.sysctl_tcp_limit_output_bytes,
 		.maxlen		= sizeof(int),
-		.mode		= 0444,
+		.mode		= 0644,
 		.proc_handler	= proc_dointvec
 	},
 	{
@@ -1224,7 +1224,7 @@ static struct ctl_table ipv4_net_table[] = {
 		.procname	= "tcp_wmem",
 		.data		= &init_net.ipv4.sysctl_tcp_wmem,
 		.maxlen		= sizeof(init_net.ipv4.sysctl_tcp_wmem),
-		.mode		= 0444,
+		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ONE,
 	},
@@ -1232,7 +1232,7 @@ static struct ctl_table ipv4_net_table[] = {
 		.procname	= "tcp_rmem",
 		.data		= &init_net.ipv4.sysctl_tcp_rmem,
 		.maxlen		= sizeof(init_net.ipv4.sysctl_tcp_rmem),
-		.mode		= 0444,
+		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ONE,
 	},
