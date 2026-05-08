@@ -163,11 +163,15 @@ mkdir -p build/out/$MODEL/zip/files
 mkdir -p build/out/$MODEL/zip/META-INF/com/google/android
 
 set_localversion() {
+
     CONFIG_FILE="out/.config"
-
+    
     BASE_LV=$(grep -E '^CONFIG_LOCALVERSION=' "$CONFIG_FILE" | cut -d'"' -f2)
-
+    
     LV_SUFFIX=""
+
+    # Set Kernel Version Release
+    KVER="-v6.5.2"
 
     if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
         LV_SUFFIX="-KSUN-SUSFS"
@@ -177,7 +181,7 @@ set_localversion() {
         LV_SUFFIX="-VANILLA"
     fi
 
-    UPDATED_LV="${BASE_LV}${LV_SUFFIX}"
+    UPDATED_LV="${BASE_LV}${KVER}${LV_SUFFIX}"
 
     ./scripts/config --file "$CONFIG_FILE" \
         --set-str LOCALVERSION "$UPDATED_LV"
