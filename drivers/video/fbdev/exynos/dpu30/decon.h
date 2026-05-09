@@ -1203,6 +1203,7 @@ struct decon_hiber {
 	/* hibernation exit count only increasing through sysfs */
 	u32 early_wakeup_cnt;
 	bool early_wakeup_enable;
+	atomic_t post_unblank_blocked;
 
 	int frame_cnt;
 	int fps;
@@ -1904,6 +1905,19 @@ static inline void decon_hiber_trig_reset(struct decon_device *decon)
 {
 	if (decon)
 		atomic_set(&decon->hiber.trig_cnt, 0);
+}
+
+static inline void decon_hiber_block_post_unblank(struct decon_device *decon)
+{
+	if (decon && decon->hiber.enabled &&
+			atomic_xchg(&decon->hiber.post_unblank_blocked, 1) == 0)
+		decon_hiber_block(decon);
+}
+
+static inline void decon_hiber_unblock_post_unblank(struct decon_device *decon)
+{
+	if (decon && atomic_xchg(&decon->hiber.post_unblank_blocked, 0))
+		decon_hiber_unblock(decon);
 }
 
 static inline bool decon_min_lock_cond(struct decon_device *decon)

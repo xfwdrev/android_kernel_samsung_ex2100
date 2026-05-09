@@ -703,6 +703,7 @@ static int decon_enable(struct decon_device *decon)
 				decon->id, decon_state_names[next_state], ret);
 		goto out;
 	}
+	decon_hiber_block_post_unblank(decon);
 	if (decon->dt.out_type != DECON_OUT_WB)
 		decon_info("decon-%d %s - (state:%s -> %s)\n", decon->id, __func__,
 			decon_state_names[prev_state],
@@ -1012,6 +1013,8 @@ static int decon_disable(struct decon_device *decon)
 
 	if (decon->state == DECON_STATE_TUI)
 		decon_tui_protection_no_lock(false);
+
+	decon_hiber_unblock_post_unblank(decon);
 
 	DPU_EVENT_LOG(DPU_EVT_BLANK, &decon->sd, ktime_set(0, 0));
 	if (decon->dt.out_type != DECON_OUT_WB)
@@ -3272,6 +3275,7 @@ static void decon_update_regs_handler(struct kthread_work *work)
 		} else {
 			decon_set_cursor_reset(decon, data);
 			decon_update_regs(decon, data);
+			decon_hiber_unblock_post_unblank(decon);
 #if IS_ENABLED(CONFIG_MCD_PANEL) || \
 	defined(CONFIG_EXYNOS_READ_ESD_SOLUTION)
 			memcpy(&decon->last_regs, data, sizeof(struct decon_reg_data));

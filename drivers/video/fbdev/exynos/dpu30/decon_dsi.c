@@ -1278,6 +1278,7 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 	struct decon_device *decon = win->decon;
 	struct v4l2_subdev *sd = NULL;
 	struct decon_win_config config;
+	struct decon_reg_data *regs = NULL;
 	int ret = 0;
 	struct decon_mode_info psr;
 	int dpp_id = decon->dt.dft_ch;
@@ -1285,6 +1286,9 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 	unsigned long aclk_khz;
 	struct decon_window_regs win_regs;
 	int win_no = win->idx;
+	bool bts_updated = false;
+	bool update_requested = false;
+	bool update_done = false;
 
 	if (decon->dt.out_type != DECON_OUT_DSI) {
 		decon_warn("%s: decon%d unspported on out_type(%d)\n",
@@ -1322,6 +1326,8 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 	}
 
 	config.dpp_parm.addr[0] = info->fix.smem_start;
+	config.state = DECON_WIN_STATE_BUFFER;
+	config.channel = decon->dt.dft_ch;
 	config.src.x =  var->xoffset;
 	config.src.y =  var->yoffset;
 	config.src.w = var->xres;
@@ -1342,6 +1348,20 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 	decon_hiber_block_exit(decon);
 
 	decon_to_psr_info(decon, &psr);
+
+#if IS_ENABLED(CONFIG_EXYNOS_BTS) || IS_ENABLED(CONFIG_EXYNOS_BTS_MODULE)
+	regs = kzalloc(sizeof(*regs), GFP_KERNEL);
+	if (regs) {
+		memcpy(&regs->dpp_config[win_no], &config,
+				sizeof(struct decon_win_config));
+		regs->num_of_window = 1;
+		decon->bts.ops->bts_calc_bw(decon, regs);
+		decon->bts.ops->bts_update_bw(decon, regs, 0);
+		bts_updated = true;
+	} else {
+		decon_warn("%s: failed to allocate bts reg data\n", __func__);
+	}
+#endif
 
 	/*
 	 * info->var is old parameters and var is new requested parameters.
@@ -1385,13 +1405,25 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 	decon_reg_all_win_shadow_update_req(decon->id);
 
 	decon_reg_start(decon->id, &psr);
+	update_requested = true;
 err:
 	decon_wait_for_vsync(decon, VSYNC_TIMEOUT_MSEC);
 
-	if (decon_reg_wait_update_done_and_mask(decon->id, &psr, SHADOW_UPDATE_TIMEOUT)
-			< 0)
+	if (update_requested &&
+			decon_reg_wait_update_done_and_mask(decon->id, &psr, SHADOW_UPDATE_TIMEOUT)
+			< 0) {
 		decon_err("%s: wait_for_update_timeout\n", __func__);
+	} else if (update_requested) {
+		update_done = true;
+	}
 
+#if IS_ENABLED(CONFIG_EXYNOS_BTS) || IS_ENABLED(CONFIG_EXYNOS_BTS_MODULE)
+	if (bts_updated && update_done)
+		decon->bts.ops->bts_update_bw(decon, regs, 1);
+	kfree(regs);
+#endif
+	if (update_done)
+		decon_hiber_unblock_post_unblank(decon);
 	decon_hiber_unblock(decon);
 	return ret;
 }
@@ -1648,6 +1680,7 @@ int decon_register_hiber_work(struct decon_device *decon)
 
 	atomic_set(&decon->hiber.trig_cnt, 0);
 	atomic_set(&decon->hiber.block_cnt, 0);
+	atomic_set(&decon->hiber.post_unblank_blocked, 0);
 
 	kthread_init_worker(&decon->hiber.worker);
 	decon->hiber.thread = kthread_run(kthread_worker_fn,
