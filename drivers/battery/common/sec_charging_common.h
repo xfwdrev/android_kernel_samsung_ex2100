@@ -34,6 +34,8 @@
 #include <linux/pm_wakeup.h>
 #include <linux/battery/sec_battery_common.h>
 #include <dt-bindings/battery/sec-battery.h>
+#include "sec_charging_modprobe.h"
+#include "sec_battery_vote.h"
 
 /* definitions */
 #define SEC_BATTERY_CABLE_HV_WIRELESS_ETX	100
@@ -240,6 +242,7 @@ enum sec_battery_adc_channel {
 enum sec_battery_charge_mode {
 	SEC_BAT_CHG_MODE_BUCK_OFF = 0, /* buck, chg off */
 	SEC_BAT_CHG_MODE_CHARGING_OFF,
+	SEC_BAT_CHG_MODE_PASS_THROUGH,
 	SEC_BAT_CHG_MODE_CHARGING, /* buck, chg on */
 //	SEC_BAT_CHG_MODE_BUCK_ON,
 	SEC_BAT_CHG_MODE_OTG_ON,
@@ -286,6 +289,17 @@ enum sec_battery_direct_charging_source_ctrl {
 	SEC_SEND_UVDM = 0x2,
 	SEC_STORE_MODE = 0x4,
 };
+
+enum sec_battery_slate_mode {
+	SEC_SLATE_OFF = 0,
+	SEC_SLATE_MODE,
+	SEC_SMART_SWITCH_SLATE,
+	SEC_SMART_SWITCH_SRC,
+};
+
+extern const char *sb_rx_type_str(int type);
+extern const char *sb_vout_ctr_mode_str(int vout_mode);
+extern const char *sb_rx_vout_str(int vout);
 
 /* tx_event */
 #define BATT_TX_EVENT_WIRELESS_TX_STATUS		0x00000001

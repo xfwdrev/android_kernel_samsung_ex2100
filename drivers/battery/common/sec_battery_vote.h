@@ -24,6 +24,7 @@ enum {
 struct sec_vote;
 
 extern int get_sec_vote(struct sec_vote *vote, const char **name, int *value);
+extern struct sec_vote *find_vote(const char *name);
 extern struct sec_vote *sec_vote_init(const char *name, int type, int num, int init_val,
 		const char **voter_name, int(*cb)(void *data, int value), void *data);
 extern void sec_vote_destroy(struct sec_vote *vote);
@@ -36,5 +37,15 @@ extern int show_sec_vote_status(char *buf, unsigned int p_size);
 extern void change_sec_voter_pri(struct sec_vote *vote, int event, int pri);
 
 #define sec_vote(vote, event, en, value)	_sec_vote(vote, event, en, value, __func__, __LINE__)
+#define sec_votef(name, event, en, value) \
+do { \
+	struct sec_vote *vote = find_vote(name); \
+\
+	if (!vote) { \
+		pr_err("%s: failed to find vote(%s)\n", __func__, (name)); \
+		break; \
+	} \
+	_sec_vote(vote, event, en, value, __func__, __LINE__); \
+} while (0) \
 
 #endif

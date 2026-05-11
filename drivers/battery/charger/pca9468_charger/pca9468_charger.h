@@ -268,6 +268,9 @@ enum {
 #define NTCV_STEP		2346 	// 2.346mV(2346uV) LSB, Range(0V ~ 2.4V)
 #define ADC_IIN_OFFSET	900000	// 900mA
 
+/* adc_gain bit[7:4] of reg 0x31 - 2's complement */
+static int adc_gain[16] = { 0, 1, 2, 3, 4, 5, 6, 7, -8, -7, -6, -5, -4, -3, -2, -1 };
+
 /* Timer definition */
 #if defined(CONFIG_SEC_FACTORY)
 #define PCA9468_VBATMIN_CHECK_T	0		// 0ms
@@ -285,6 +288,7 @@ enum {
 #define PCA9468_PPS_PERIODIC_T	10000	// 10000ms
 #endif
 #define PCA9468_CVMODE_CHECK2_T	1000	// 1000ms
+#define PCA9468_INIT_WAKEUP_T	10000	// 10000ms
 
 /* Battery Threshold */
 #if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
@@ -335,7 +339,7 @@ enum {
 #define PCA9468_TA_MIN_VOL		7000000	// 7000000uV
 /* Maximum TA current threshold */
 #define PCA9468_TA_MAX_CUR		2450000	// 2450000uA
-/* Mimimum TA current threshold */
+/* Minimum TA current threshold */
 #define PCA9468_TA_MIN_CUR		1000000	// 1000000uA - PPS minimum current
 
 /* Minimum TA voltage threshold in Preset mode */
@@ -376,6 +380,8 @@ enum {
 #define PCA9468_IIN_CC_UPPER_OFFSET	150000	// 150mA
 /* TA current low offset for reducing input current */
 #define PCA9468_TA_CUR_LOW_OFFSET	200000	// 200mA
+/* TA voltage offset value for bypass mode */
+#define PCA9468_TA_VOL_OFFSET_BYPASS	600000	// 600mV
 
 /* PD Message Voltage and Current Step */
 #define PD_MSG_TA_VOL_STEP			20000	// 20mV
@@ -423,6 +429,7 @@ enum {
 
 	DC_STATE_ADJUST_TACUR,	/* Adjust TA current to set new TA current over 1000mA input */
 	DC_STATE_WC_CV_MODE,	/* Check WC(Wireless Charger) CV mode status */
+	DC_STATE_BYPASS_MODE,	/* Check Bypass mode status */
 	DC_STATE_MAX,
 };
 
@@ -463,6 +470,7 @@ enum {
 	TIMER_ADJUST_TAVOL,
 	TIMER_ADJUST_TACUR,
 	TIMER_CHECK_WCCVMODE,
+	TIMER_CHECK_BYPASSMODE,
 };
 
 /* PD Message Type */
@@ -476,6 +484,12 @@ enum {
 	INC_NONE,	/* No increment */
 	INC_TA_VOL, /* TA voltage increment */
 	INC_TA_CUR, /* TA current increment */
+};
+
+/* TA Control method for the direct charging */
+enum {
+	TA_CTRL_CL_MODE,
+	TA_CTRL_CV_MODE,
 };
 
 /* TA Mode for the direct charging */
@@ -503,6 +517,14 @@ enum {
 	REV_B4,		/* B4 */
 };
 
+/* IIN offset as the switching frequency in uA*/
+static int iin_fsw_cfg[16] = { 9990, 10540, 11010, 11520, 12000, 12520, 12990, 13470,
+								5460, 6050, 6580, 7150, 7670, 8230, 8720, 9260 };
+
+/* switching frequency in kHz */
+static int sw_freq[16] = { 833, 893, 935, 980, 1020, 1080, 1120, 1160,
+						440, 490, 540, 590, 630, 680, 730, 780 };
+
 struct pca9468_platform_data {
 	int	irq_gpio;	/* GPIO pin that's connected to INT# */
 	unsigned int	iin_cfg;	/* Input Current Limit - uA unit */
@@ -513,6 +535,7 @@ struct pca9468_platform_data {
 	unsigned int 	v_float_max;	/* V_Float max Voltage -uV unit */
 	unsigned int 	snsres;		/* Current sense resister, 0 - 5mOhm, 1 - 10mOhm */
 	unsigned int 	fsw_cfg; 	/* Switching frequency, refer to the datasheet, 0 - 833kHz, ... , 3 - 980kHz */
+	unsigned int	fsw_cfg_byp;	/* Switching frequency for bypass mode, 0 - 833kHz, ... , 3 - 980kHz */
 	unsigned int	ntc_th;		/* NTC voltage threshold : 0~2.4V - uV unit */
 	unsigned int	ta_mode;	/* Default ta mode, 0 - No direct charging, 1 - 2:1 charging mode, 2 - 4:1 charging mode */
 	unsigned int	cv_polling;	/* CV mode polling time in step1 charging - ms unit */
@@ -550,13 +573,17 @@ struct pca9468_platform_data {
  * @prev_inc: Previous TA voltage or current increment factor
  * @req_new_iin: Request for new input current limit, true or false
  * @req_new_vfloat: Request for new vfloat, true or false
+ * @req_new_dc_mode: Request for new dc mode, true or false
  * @new_iin: New request input current limit, uA
  * @new_vfloat: New request vfloat, uV
+ * @new_dc_mode: New request dc mode, Normal mode or Bypass mode
  * @adc_comp_gain: adc gain for compensation
  * @retry_cnt: retry counter for re-starting charging if charging stop happens
  * @ta_mode: ta mode that TA can support for the direct charging, 2:1 or 4:1 mode
+ * @ta_ctrl: TA control method for the direct charging, Current Limit mode or Constant Voltage mode.
  * @comp_type: Input current compensation type in CC mode
  * @revision: PCA9468 revision information, B3 or B4
+ * @dc_mode: Direct charging mode, Normal mode or Bypass mode
  * @pdata: pointer to platform data
  * @debug_root: debug entry
  * @debug_address: debug register address
@@ -603,16 +630,20 @@ struct pca9468_charger {
 
 	bool				req_new_iin;
 	bool				req_new_vfloat;
+	bool				req_new_dc_mode;
 	unsigned int		new_iin;
 	unsigned int		new_vfloat;
+	unsigned int		new_dc_mode;
 
 	int					adc_comp_gain;
 
 	int					retry_cnt;
 	int					ta_mode;
+	int					ta_ctrl;
 
 	int					comp_type;
 	int					revision;
+	int					dc_mode;
 
 	struct pca9468_platform_data *pdata;
 

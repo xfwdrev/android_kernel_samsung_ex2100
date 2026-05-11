@@ -2303,6 +2303,7 @@ static int max77705_fg_set_property(struct power_supply *psy,
 				max77705_offset_leakage(fuelgauge);
 				break;
 			case SEC_BAT_CHG_MODE_CHARGING:
+			case SEC_BAT_CHG_MODE_PASS_THROUGH:
 				fuelgauge->is_charging = true;
 				max77705_offset_leakage(fuelgauge);
 				break;

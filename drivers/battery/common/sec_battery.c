@@ -182,6 +182,7 @@ char *sec_bat_health_str[] = {
 char *sec_bat_charge_mode_str[] = {
 	"Buck-Off",
 	"Charging-Off",
+	"Pass-Through",
 	"Charging-On",
 	"OTG-On",
 	"OTG-Off",

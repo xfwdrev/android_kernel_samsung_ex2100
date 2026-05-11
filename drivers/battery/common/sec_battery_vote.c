@@ -405,6 +405,8 @@ struct sec_vote *find_vote(const char *name)
 	}
 	return NULL;
 }
+EXPORT_SYMBOL(find_vote);
+
 struct sec_vote *sec_vote_init(const char *name, int type, int num, int init_val,
 		const char **voter_name, int(*cb)(void *data, int value), void *data)
 {

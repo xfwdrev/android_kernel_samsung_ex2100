@@ -6136,6 +6136,16 @@ CONFIG_VBUS_NOTIFIER=m
 # end of Samsung Vbus Notifier drivers
 
 #
+# SB Core configs
+#
+CONFIG_SB_CORE=m
+CONFIG_SB_PQUEUE=y
+CONFIG_SB_NOTIFY=y
+CONFIG_SB_SYSFS=y
+CONFIG_SB_VOTE=y
+# end of SB Core configs
+
+#
 # Samsung Mobile Power Management Options
 #
 CONFIG_SEC_PM=y

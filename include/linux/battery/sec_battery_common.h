@@ -188,6 +188,13 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_HARDRESET_OCCUR,
 	POWER_SUPPLY_EXT_PROP_ABNORMAL_TA,
 	POWER_SUPPLY_EXT_PROP_MAX,
+	POWER_SUPPLY_EXT_PROP_PASS_THROUGH_MODE,
+	POWER_SUPPLY_EXT_PROP_PASS_THROUGH_MODE_TA_VOL,
+	POWER_SUPPLY_EXT_PROP_D2D_REVERSE_VOLTAGE,
+	POWER_SUPPLY_EXT_PROP_D2D_REVERSE_OCP,
+	POWER_SUPPLY_EXT_PROP_D2D_REVERSE_VBUS,
+	POWER_SUPPLY_EXT_PROP_DC_OP_MODE,
+	POWER_SUPPLY_EXT_PROP_ADC_MODE,
 };
 
 enum sec_battery_usb_conf {
@@ -242,5 +249,33 @@ static inline struct power_supply *get_power_supply_by_name(char *name)
 	}					\
 	ret;	\
 })
+
+#if defined(CONFIG_OF)
+#define sb_of_parse_u32(np, pdata, value, deft) \
+({ \
+	int ret = 0; \
+	ret = of_property_read_u32(np, #value, (unsigned int *)&pdata->value); \
+	if (!ret) \
+		pr_info("%s: %s - write "#value" to %d\n", __func__, np->name, pdata->value); \
+	else \
+		pdata->value = deft; \
+	ret;\
+})
+
+#define sb_of_parse_str(np, pdata, value) \
+({ \
+	int ret = 0; \
+	ret = of_property_read_string(np, #value, (const char **)&pdata->value); \
+	if (!ret) \
+		pr_info("%s: %s - write "#value" to %s\n", __func__, np->name, pdata->value); \
+	ret;\
+})
+
+#define sb_of_parse_bool(np, pdata, value) \
+({ \
+	pdata->value = of_property_read_bool(np, #value); \
+	pr_info("%s: %s - write "#value" to %d\n", __func__, np->name, pdata->value); \
+})
+#endif
 
 #endif /* __SEC_BATTERY_COMMON_H */
