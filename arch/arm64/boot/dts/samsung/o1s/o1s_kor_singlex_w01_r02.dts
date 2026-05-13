@@ -635,6 +635,15 @@
 					charger,dchg_min_current = <0x7d0>;
 					charger,ta_alert_wa;
 				};
+				
+				pass-through {
+					start_delay = <0x1388>;
+					init_delay = <0x1388>;
+					min_cap = <0xc8>;
+					fixed_sc_cap = <0x384>;
+					max_icl = <0xbb8>;
+					vfloat = <0x1130>;
+				};
 
 				cable-info {
 					default_input_current = <0x708>;
