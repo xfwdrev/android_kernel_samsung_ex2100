@@ -13,11 +13,6 @@
 
 #include "sec_direct_charger.h"
 #include "battery_logger.h"
-							  
-#if IS_ENABLED(CONFIG_SEC_ABC)
-#include <linux/sti/abc_common.h>
-#endif
-	  
 
 char *sec_direct_chg_mode_str[] = {
 	"OFF", //SEC_DIRECT_CHG_MODE_DIRECT_OFF
@@ -218,16 +213,8 @@ static int sec_direct_chg_check_charging_source(struct sec_direct_charger_info *
 
 	/* check charging status */
 	psy_do_property("battery", get, POWER_SUPPLY_EXT_PROP_DIRECT_HAS_APDO, value);
-											 
-								
-												   
-
 	has_apdo = value.intval;
-					  
-	 
 	if (charger->direct_chg_done || (charger->capacity >= 95) || !has_apdo || charger->store_mode) {
-	  
-  
 		pr_info("%s:  S/C was selected! dc_done(%s), SoC(%d), has_apdo(%d)\n",
 				__func__, charger->direct_chg_done ? "TRUE" : "FALSE",
 				charger->capacity, value.intval);
@@ -351,10 +338,6 @@ static int sec_direct_chg_set_charging_current(struct sec_direct_charger_info *c
 	union power_supply_propval value = {0,};
 	int charging_source;
 
-								
-													  
-									
-
 	pr_info("%s: called(%dmA)\n", __func__, charging_current);
 
 	/* main charger */
@@ -369,10 +352,6 @@ static int sec_direct_chg_set_charging_current(struct sec_direct_charger_info *c
 
 		charging_source = sec_direct_chg_check_charging_source(charger);
 		if (charging_source == SEC_CHARGING_SOURCE_DIRECT) {
-							  
-															  
-														 
-	  
 			value.intval = charger->dc_input_current;
 			psy_do_property(charger->pdata->direct_charger_name, set,
 				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, value);

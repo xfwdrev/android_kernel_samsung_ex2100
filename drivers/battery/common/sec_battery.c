@@ -9,6 +9,9 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#include <linux/battery/sb_sysfs.h>
+#include <linux/battery/sb_notify.h>
+
 #include "sec_battery.h"
 #include "sec_battery_sysfs.h"
 #include "sec_battery_dt.h"
@@ -3644,6 +3647,10 @@ continue_monitor:
 skip_current_monitor:
 	psy_do_property(battery->pdata->charger_name, get,
 		POWER_SUPPLY_EXT_PROP_MONITOR_WORK, val);
+#if IS_ENABLED(CONFIG_DIRECT_CHARGING)
+	if (is_pd_apdo_wire_type(battery->cable_type) && (val.intval == LOW_VBAT_SET))
+		sec_vote_refresh(battery->fcc_vote);
+#endif
 	if (battery->pdata->wireless_charger_name)
 		psy_do_property(battery->pdata->wireless_charger_name, get,
 			POWER_SUPPLY_EXT_PROP_MONITOR_WORK, val);
@@ -6882,6 +6889,43 @@ static int sec_battery_check_devs_registered(struct device *dev)
 	return 0;
 }
 
+static int sb_handle_notification(struct notifier_block *nb, unsigned long action, void *data)
+{
+	struct sec_battery_info *battery = container_of(nb, struct sec_battery_info, sb_nb);
+	sb_data *sbd = data;
+	int ret = 0;
+
+	switch (action) {
+	case SB_NOTIFY_DEV_PROBE:
+		ret = sb_sysfs_create_attrs(&battery->psy_bat->dev);
+		pr_info("%s: create sysfs node (name = %s, count = %d)\n",
+			__func__, cast_sb_data_ptr(const char, sbd), ret);
+		break;
+	case SB_NOTIFY_DEV_LIST:
+	{
+		struct sbn_dev_list *tmp_list = cast_sb_data_ptr(struct sbn_dev_list, sbd);
+
+		ret = sb_sysfs_create_attrs(&battery->psy_bat->dev);
+		pr_info("%s: create sysfs node (dev_count = %d, sysfs_count = %d)\n",
+			__func__, tmp_list->count, ret);
+	}
+		break;
+	case SB_NOTIFY_EVENT_MISC:
+	{
+		struct sbn_bit_event *misc = cast_sb_data_ptr(struct sbn_bit_event, sbd);
+
+		sec_bat_set_misc_event(battery, misc->value, misc->mask);
+	}
+		break;
+	case SB_NOTIFY_DEV_SHUTDOWN:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct power_supply_desc battery_power_supply_desc = {
 	.name = "battery",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
@@ -7417,6 +7461,9 @@ static int sec_battery_probe(struct platform_device *pdev)
 
 	ret = sb_full_soc_init(battery);
 	dev_info(battery->dev, "%s: sb_full_soc (%s)\n", __func__, (ret) ? "fail" : "success");
+
+	ret = sb_notify_register(&battery->sb_nb, sb_handle_notification, "battery", SB_DEV_BATTERY);
+	dev_info(battery->dev, "%s: sb_notify_register (%s)\n", __func__, (ret) ? "fail" : "success");
 
 	sec_vote(battery->topoff_vote, VOTER_FULL_CHARGE, true, battery->pdata->full_check_current_1st);
 	sec_vote(battery->fv_vote, VOTER_FULL_CHARGE, true, battery->pdata->chg_float_voltage);

@@ -860,6 +860,7 @@ struct sec_battery_info {
 	struct notifier_block batt_nb;
 #endif
 #endif
+	struct notifier_block sb_nb;
 
 	bool pdic_attach;
 	bool pdic_ps_rdy;
@@ -917,6 +918,7 @@ struct sec_battery_info {
 	unsigned int charge_power;		/* charge power (mW) */
 	unsigned int max_charge_power;		/* max charge power (mW) */
 	unsigned int pd_max_charge_power;		/* max charge power for pd (mW) */
+	unsigned int pd_rated_power;		/* rated power for pd (W) */
 
 	struct mutex adclock;
 	struct adc_sample_info	adc_sample[ADC_CH_COUNT];
