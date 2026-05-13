@@ -8110,14 +8110,12 @@ static void __init watermark_scale_factor_init(void)
 	 * Keep the 6 GB class on the safest watermark spacing and scale up
 	 * gradually for the larger 8/12/16 GB variants in this family.
 	 */
-	if (total_ram_mb > 14000)
-		watermark_scale_factor = 60;
-	else if (total_ram_mb > 10000)
-		watermark_scale_factor = 50;
-	else if (total_ram_mb > 6200)
-		watermark_scale_factor = 40;
+	if (total_ram_mb < 7000)
+		watermark_scale_factor = 10;
+	else if (total_ram_mb < 10000)
+		watermark_scale_factor = 15;
 	else
-		watermark_scale_factor = 40;
+		watermark_scale_factor = 20;
 }
 
 /**
