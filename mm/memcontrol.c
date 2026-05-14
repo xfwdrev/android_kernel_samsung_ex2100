@@ -71,6 +71,7 @@
 #include <linux/uaccess.h>
 
 #include <trace/events/vmscan.h>
+#include <trace/hooks/mm.h>
 
 struct cgroup_subsys memory_cgrp_subsys __read_mostly;
 EXPORT_SYMBOL(memory_cgrp_subsys);
@@ -1358,6 +1359,33 @@ struct lruvec *lock_page_lruvec_irqsave(struct page *page, unsigned long *flags)
 
 	return lruvec;
 }
+
+struct lruvec *page_to_lruvec(struct page *page, pg_data_t *pgdat)
+{
+	return mem_cgroup_page_lruvec(page, pgdat);
+}
+EXPORT_SYMBOL_GPL(page_to_lruvec);
+
+void do_traversal_all_lruvec(void)
+{
+	pg_data_t *pgdat;
+
+	for_each_online_pgdat(pgdat) {
+		struct mem_cgroup *memcg;
+
+		memcg = mem_cgroup_iter(NULL, NULL, NULL);
+		do {
+			struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
+
+			spin_lock_irq(&lruvec->lru_lock);
+			trace_android_vh_do_traversal_lruvec(lruvec);
+			spin_unlock_irq(&lruvec->lru_lock);
+
+			memcg = mem_cgroup_iter(NULL, memcg, NULL);
+		} while (memcg);
+	}
+}
+EXPORT_SYMBOL_GPL(do_traversal_all_lruvec);
 
 /**
  * mem_cgroup_update_lru_size - account for adding or removing an lru page

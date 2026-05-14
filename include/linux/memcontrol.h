@@ -358,6 +358,9 @@ struct mem_cgroup {
 
 extern struct mem_cgroup *root_mem_cgroup;
 
+struct lruvec *page_to_lruvec(struct page *page, pg_data_t *pgdat);
+void do_traversal_all_lruvec(void);
+
 static inline bool mem_cgroup_is_root(struct mem_cgroup *memcg)
 {
 	return (memcg == root_mem_cgroup);
@@ -984,9 +987,18 @@ static inline void mem_cgroup_migrate(struct page *old, struct page *new)
 }
 
 static inline struct lruvec *mem_cgroup_lruvec(struct pglist_data *pgdat,
-				struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg)
 {
 	return node_lruvec(pgdat);
+}
+
+static inline struct lruvec *page_to_lruvec(struct page *page, pg_data_t *pgdat)
+{
+	return NULL;
+}
+
+static inline void do_traversal_all_lruvec(void)
+{
 }
 
 static inline struct lruvec *mem_cgroup_page_lruvec(struct page *page,
