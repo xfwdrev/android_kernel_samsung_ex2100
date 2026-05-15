@@ -15,6 +15,10 @@
 #endif // #if defined(CONFIG_KSU_SUSFS_SUS_MOUNT) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 #include "internal.h"
 
+#ifdef CONFIG_NOMOUNT
+extern void nomount_spoof_statfs(const struct path *path, struct kstatfs *buf);
+#endif
+
 static int flags_by_mnt(int mnt_flags)
 {
 	int flags = 0;
@@ -133,6 +137,9 @@ orig_flow:
 	error = statfs_by_dentry(path->dentry, buf);
 	if (!error)
 		buf->f_flags = calculate_f_flags(path->mnt);
+#ifdef CONFIG_NOMOUNT
+	nomount_spoof_statfs(path, buf);
+#endif
 	return error;
 
 }

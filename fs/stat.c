@@ -107,6 +107,10 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 }
 EXPORT_SYMBOL(vfs_getattr_nosec);
 
+#ifdef CONFIG_NOMOUNT
+extern int nomount_handle_getattr(int ret, const struct path *path, struct kstat *stat);
+#endif
+
 /*
  * vfs_getattr - Get the enhanced basic attributes of a file
  * @path: The file of interest
@@ -136,7 +140,11 @@ int vfs_getattr(const struct path *path, struct kstat *stat,
 	retval = security_inode_getattr(path);
 	if (retval)
 		return retval;
+#ifdef CONFIG_NOMOUNT
+    return nomount_handle_getattr(vfs_getattr_nosec(path, stat, request_mask, query_flags), path, stat);
+#else
 	return vfs_getattr_nosec(path, stat, request_mask, query_flags);
+#endif
 }
 EXPORT_SYMBOL_NS(vfs_getattr, ANDROID_GKI_VFS_EXPORT_ONLY);
 

@@ -41,6 +41,33 @@ extern bool susfs_is_inode_sus_path(struct inode *inode);
 	unsafe_copy_to_user(dst, src, len, label);		\
 } while (0)
 
+#ifdef CONFIG_NOMOUNT
+extern void nomount_vfs_inject_dir(struct file *file, struct dir_context *ctx);
+extern bool nomount_should_skip(void);
+#define NOMOUNT_MAGIC_POS 0x7E000000
+
+#define nomount_handle_iterate_dir(file, ctx, shared, res)               \
+do {                                                                     \
+    loff_t _old_pos = (ctx)->pos;                                        \
+    bool _nm_skip = nomount_should_skip();                               \
+                                                                         \
+    if ((ctx)->pos >= NOMOUNT_MAGIC_POS && !_nm_skip) {                  \
+        (res) = 0;                                                       \
+    } else {                                                             \
+        if (shared)                                                      \
+            (res) = (file)->f_op->iterate_shared((file), (ctx));         \
+        else                                                             \
+            (res) = (file)->f_op->iterate((file), (ctx));                \
+    }                                                                    \
+                                                                         \
+    if ((res) >= 0 && !_nm_skip) {                                       \
+        if ((ctx)->pos == _old_pos || (ctx)->pos >= NOMOUNT_MAGIC_POS) { \
+            nomount_vfs_inject_dir((file), (ctx));                       \
+        }                                                                \
+    }                                                                    \
+} while (0)
+#endif
+
 int iterate_dir(struct file *file, struct dir_context *ctx)
 {
 	struct inode *inode = file_inode(file);
@@ -65,10 +92,14 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 	res = -ENOENT;
 	if (!IS_DEADDIR(inode)) {
 		ctx->pos = file->f_pos;
+#ifdef CONFIG_NOMOUNT
+		nomount_handle_iterate_dir(file, ctx, shared, res);
+#else
 		if (shared)
 			res = file->f_op->iterate_shared(file, ctx);
 		else
 			res = file->f_op->iterate(file, ctx);
+#endif
 		file->f_pos = ctx->pos;
 		fsnotify_access(file);
 		file_accessed(file);
@@ -456,7 +487,6 @@ int ksys_getdents64(unsigned int fd, struct linux_dirent64 __user *dirent,
 	fdput_pos(f);
 	return error;
 }
-
 
 SYSCALL_DEFINE3(getdents64, unsigned int, fd,
 		struct linux_dirent64 __user *, dirent, unsigned int, count)

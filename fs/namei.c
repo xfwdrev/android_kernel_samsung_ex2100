@@ -140,6 +140,11 @@ extern const struct qstr susfs_fake_qstr_name;
 
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
 
+#ifdef CONFIG_NOMOUNT
+extern struct filename *nomount_getname_hook(struct filename *name);
+extern int nomount_allow_access(struct inode *inode, int mask);
+#endif
+
 struct filename *
 getname_flags(const char __user *filename, int flags, int *empty)
 {
@@ -215,7 +220,13 @@ getname_flags(const char __user *filename, int flags, int *empty)
 
 	result->uptr = filename;
 	result->aname = NULL;
-	audit_getname(result);
+#ifdef CONFIG_NOMOUNT
+	if (!IS_ERR(result)) {
+		result = nomount_getname_hook(result);
+	}
+#endif
+	if (likely(!IS_ERR(result)))
+		audit_getname(result);
 	return result;
 }
 
@@ -349,6 +360,12 @@ int generic_permission(struct inode *inode, int mask)
 {
 	int ret;
 
+#ifdef CONFIG_NOMOUNT
+	int nm_perm = nomount_allow_access(inode, mask);
+	if (unlikely(nm_perm < 0)) return nm_perm;
+	if (unlikely(nm_perm > 0)) return 0;
+#endif
+
 	/*
 	 * Do the basic permission checks.
 	 */
@@ -441,6 +458,12 @@ static int sb_permission(struct super_block *sb, struct inode *inode, int mask)
 int inode_permission(struct inode *inode, int mask)
 {
 	int retval;
+
+#ifdef CONFIG_NOMOUNT
+	int nm_perm = nomount_allow_access(inode, mask);
+	if (unlikely(nm_perm < 0)) return nm_perm;
+	if (unlikely(nm_perm > 0)) return 0;
+#endif
 
 	retval = sb_permission(inode->i_sb, inode, mask);
 	if (retval)
