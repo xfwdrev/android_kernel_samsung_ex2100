@@ -3959,9 +3959,10 @@ unsigned long mem_cgroup_node_nr_lru_pages(struct mem_cgroup *memcg,
 {
 	struct mem_cgroup_per_node *mz = mem_cgroup_nodeinfo(memcg, nid);
 	unsigned long total = 0;
+	unsigned long mask = lru_mask;
 	int lru;
 
-	for_each_set_bit(lru, &lru_mask, NR_LRU_LISTS) {
+	for_each_set_bit(lru, &mask, NR_LRU_LISTS) {
 		total += mz->lru_size[lru];
 	}
 	return total;
