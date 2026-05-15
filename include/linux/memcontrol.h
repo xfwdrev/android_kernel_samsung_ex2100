@@ -490,6 +490,9 @@ static inline bool lruvec_holds_page_lru_lock(struct page *page,
 	if (mem_cgroup_disabled())
 		return lruvec == node_lruvec(pgdat);
 
+	if (lruvec == node_lruvec(pgdat))
+		return !page_memcg(page);
+
 	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	memcg = page_memcg(page) ? : root_mem_cgroup;
 
@@ -620,6 +623,12 @@ void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
 static inline unsigned long mem_cgroup_get_lru_size(struct lruvec *lruvec, enum lru_list lru)
 {
 	struct mem_cgroup_per_node *mz;
+
+	if (mem_cgroup_disabled())
+		return node_page_state(lruvec_pgdat(lruvec), NR_LRU_BASE + lru);
+
+	if (lruvec == &lruvec_pgdat(lruvec)->lruvec)
+		return node_page_state(lruvec_pgdat(lruvec), NR_LRU_BASE + lru);
 
 	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	return READ_ONCE(mz->lru_size[lru]);

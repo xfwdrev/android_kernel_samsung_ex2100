@@ -1407,6 +1407,9 @@ void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
 	if (mem_cgroup_disabled())
 		return;
 
+	if (lruvec == &lruvec_pgdat(lruvec)->lruvec)
+		return;
+
 	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	lru_size = &mz->lru_size[lru];
 
