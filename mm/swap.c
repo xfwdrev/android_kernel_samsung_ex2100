@@ -561,8 +561,8 @@ static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec,
 		 * It can make readahead confusing.  But race window
 		 * is _really_ small and  it's non-critical problem.
 		 */
-		add_page_to_lru_list(page, lruvec);
 		SetPageReclaim(page);
+		add_page_to_lru_list(page, lruvec);
 	} else {
 		/*
 		 * The page's writeback ends up during pagevec
@@ -573,7 +573,7 @@ static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec,
 	}
 
 	if (active)
-		__count_vm_event(PGDEACTIVATE);
+		__count_vm_events(PGDEACTIVATE, hpage_nr_pages(page));
 	update_page_reclaim_stat(lruvec, file, 0);
 }
 
