@@ -16,7 +16,52 @@
 #include <soc/samsung/bts.h>
 #include <soc/samsung/cal-if.h>
 #include <linux/module.h>
+#include <linux/sched/signal.h>
 #include <linux/sec_debug.h>
+
+static bool recovery_display_pd_keep_on;
+
+static bool exynos_pd_is_display_domain(const char *pd_name)
+{
+	return pd_name && (!strcmp(pd_name, "pd-dpuf0") ||
+			!strcmp(pd_name, "pd-dpuf1"));
+}
+
+static bool exynos_pd_recovery_task_running(void)
+{
+	struct task_struct *p;
+
+	if (!strcmp(current->comm, "recovery"))
+		return true;
+
+	rcu_read_lock();
+	for_each_process(p) {
+		if (!strcmp(p->comm, "recovery")) {
+			rcu_read_unlock();
+			return true;
+		}
+	}
+	rcu_read_unlock();
+
+	return false;
+}
+
+static bool exynos_pd_keep_display_on_in_recovery(const char *pd_name)
+{
+	if (!exynos_pd_is_display_domain(pd_name))
+		return false;
+
+	if (recovery_display_pd_keep_on)
+		return true;
+
+	if (exynos_pd_recovery_task_running()) {
+		recovery_display_pd_keep_on = true;
+		pr_info(EXYNOS_PD_PREFIX "recovery display pd keep-on enabled\n");
+		return true;
+	}
+
+	return false;
+}
 
 struct exynos_pm_domain *exynos_pd_lookup_name(const char *domain_name)
 {
@@ -96,6 +141,12 @@ int exynos_pd_booton_rel(const char *pd_name)
 	}
 
 	if (of_property_read_bool(pd->of_node, "pd-boot-on")) {
+		if (exynos_pd_keep_display_on_in_recovery(pd_name)) {
+			pd->genpd.flags |= GENPD_FLAG_ALWAYS_ON;
+			pr_info(EXYNOS_PD_PREFIX "    %-9s flag kept to %d\n",
+					pd->genpd.name, pd->genpd.flags);
+			return 0;
+		}
 		pd->genpd.flags &= ~GENPD_FLAG_ALWAYS_ON;
 		pr_info(EXYNOS_PD_PREFIX "    %-9s flag set to %d\n",
 				pd->genpd.name, pd->genpd.flags);
@@ -205,6 +256,13 @@ static int exynos_pd_power_off(struct generic_pm_domain *genpd)
 
 	if (unlikely(!pd->pd_control)) {
 		pr_debug(EXYNOS_PD_PREFIX "%s is Logical sub power domain, dose not have to power off control\n", genpd->name);
+		goto acc_unlock;
+	}
+
+	if (exynos_pd_keep_display_on_in_recovery(pd->name)) {
+		pr_info(EXYNOS_PD_PREFIX "%s power-off is skipped for recovery display.\n",
+				pd->name);
+		pd->power_down_skipped = true;
 		goto acc_unlock;
 	}
 
