@@ -171,12 +171,18 @@ set_localversion() {
     LV_SUFFIX=""
 
     # Set Kernel Version Release
-    KVER="-v6.5.2"
+    if [["$RECOVERY_OPTION" != "y" ]]; then
+        KVER="-v6.5.2"
+    else
+        KVER="-v2.6"
+    fi
 
     if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
         LV_SUFFIX="-KSUN-SUSFS"
     elif [[ "$KSU_OPTION" == "y" ]]; then
         LV_SUFFIX="-KSUN"
+    elif [[ "$RECOVERY_OPTION" == "y" ]]; then
+        LV_SUFFIX="-TWRP"
     else
         LV_SUFFIX="-VANILLA"
     fi
