@@ -8110,11 +8110,11 @@ static void __init watermark_scale_factor_init(void)
 	 * gradually for the larger 8/12/16 GB variants in this family.
 	 */
 	if (total_ram_mb < 7000)
-		watermark_scale_factor = 10;
-	else if (total_ram_mb < 10000)
-		watermark_scale_factor = 15;
-	else
 		watermark_scale_factor = 20;
+	else if (total_ram_mb < 10000)
+		watermark_scale_factor = 20;
+	else
+		watermark_scale_factor = 25;
 }
 
 /**
