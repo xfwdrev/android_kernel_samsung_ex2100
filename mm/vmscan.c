@@ -54,6 +54,7 @@
 #include <linux/psi.h>
 #include <linux/kshrink_slabd.h>
 #include <linux/pagewalk.h>
+#include <linux/memblock.h>
 #include <linux/shmem_fs.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
@@ -188,6 +189,7 @@ unsigned long vm_total_pages;
 
 #define DEF_KSWAPD_THREADS_PER_NODE 2
 static int kswapd_threads = DEF_KSWAPD_THREADS_PER_NODE;
+static bool kswapd_threads_cmdline;
 static int __init kswapd_per_node_setup(char *str)
 {
 	int tmp;
@@ -199,9 +201,38 @@ static int __init kswapd_per_node_setup(char *str)
 		return 0;
 
 	kswapd_threads = tmp;
+	kswapd_threads_cmdline = true;
 	return 1;
 }
 __setup("kswapd_per_node=", kswapd_per_node_setup);
+
+/*
+ * RAM-aware kswapd thread count selection.
+ *
+ * More than 3 threads causes over-eviction with no scalability gain.
+ *
+ *   <= 8 GB: 2 threads -- tight memory, minimize reclaim CPU overhead
+ *   >  8 GB: 3 threads -- larger LRU lists benefit from parallel scanning
+ *
+ * The kswapd_per_node= cmdline param overrides this for testing.
+ */
+static void __init kswapd_threads_init(void)
+{
+	unsigned long total_ram_mb;
+
+	if (kswapd_threads_cmdline)
+		return;
+
+	total_ram_mb = memblock_phys_mem_size() >> 20;
+
+	if (total_ram_mb > 8000)
+		kswapd_threads = 3;
+	else
+		kswapd_threads = 2;
+
+	pr_info("kswapd: %lu MB RAM, using %d threads per node\n",
+		total_ram_mb, kswapd_threads);
+}
 
 static void set_task_reclaim_state(struct task_struct *task,
 				   struct reclaim_state *rs)
@@ -6788,6 +6819,9 @@ static bool kswapd_shrink_node(pg_data_t *pgdat,
 
 		sc->nr_to_reclaim += max(high_wmark_pages(zone), SWAP_CLUSTER_MAX);
 	}
+	if (kswapd_threads > 1)
+		sc->nr_to_reclaim = max(sc->nr_to_reclaim / kswapd_threads,
+					(unsigned long)SWAP_CLUSTER_MAX);
 
 	/*
 	 * Historically care was taken to put equal pressure on all zones but
@@ -7487,6 +7521,7 @@ static int __init kswapd_init(void)
 #if CONFIG_KSWAPD_CPU
 	init_kswapd_cpumask();
 #endif
+	kswapd_threads_init();
 	swap_setup();
 	for_each_node_state(nid, N_MEMORY)
  		kswapd_run(nid);
