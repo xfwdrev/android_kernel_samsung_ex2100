@@ -224,11 +224,11 @@ static int synaptics_touch_notify_call(struct notifier_block *n, unsigned long d
 	switch (data) {
 	case NOTIFIER_TSP_BLOCKING_REQUEST:
 		input_info(false, ts->dev, "%s: tsp block, ret=%d\n", __func__, ret);
-		sec_input_gesture_report(ts->dev, SPONGE_EVENT_TYPE_TSP_SCAN_BLOCK, 0, 0);
+		sec_cmd_send_gesture_uevent(&ts->sec, SPONGE_EVENT_TYPE_TSP_SCAN_BLOCK, 0, 0);
 		break;
 	case NOTIFIER_TSP_BLOCKING_RELEASE:
 		input_info(false, ts->dev, "%s: tsp unblock, ret=%d\n", __func__, ret);
-		sec_input_gesture_report(ts->dev, SPONGE_EVENT_TYPE_TSP_SCAN_UNBLOCK, 0, 0);
+		sec_cmd_send_gesture_uevent(&ts->sec, SPONGE_EVENT_TYPE_TSP_SCAN_UNBLOCK, 0, 0);
 		break;
 	default:
 		break;
@@ -575,7 +575,7 @@ int synaptics_ts_enable(struct device *dev)
 		schedule_work(&ts->work_print_info.work);
 
 	if (atomic_read(&ts->plat_data->power_state) != SEC_INPUT_STATE_POWER_OFF)
-		sec_input_forced_enable_irq(ts->irq);
+		sec_input_irq_enable(ts->plat_data);
 	return 0;
 }
 
@@ -706,7 +706,7 @@ int synaptics_ts_start_device(void *data)
 	}
 
 	if (atomic_read(&ts->plat_data->power_state) != SEC_INPUT_STATE_POWER_OFF)
-		sec_input_forced_enable_irq(ts->irq);
+		sec_input_irq_enable(ts->plat_data);
 
 	ts->plat_data->init(ts);
 out:

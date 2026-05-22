@@ -2458,7 +2458,7 @@ void synaptics_ts_set_cover_type(struct synaptics_ts_data *ts, bool enable)
 	input_info(true, ts->dev, "%s: %s, type:%d\n",
 			__func__, enable ? "close" : "open", ts->plat_data->cover_type);
 
-	cover_cmd = sec_input_check_cover_type(ts->dev) & 0xFF;
+	cover_cmd = ts->plat_data->cover_type & 0xFF;
 	ts->cover_closed = enable;
 
 	if (sec_input_cmp_ic_status(ts->dev, CHECK_POWEROFF)) {

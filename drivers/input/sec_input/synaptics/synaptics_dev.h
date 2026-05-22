@@ -668,6 +668,9 @@ struct synaptics_ts_sysfs {
 };
 
 struct synaptics_ts_data {
+	u8 gesture_id;
+	u8 gesture_x;
+	u8 gesture_y;
 	void *client;
 	struct device *dev;
 	struct mutex transfer_mutex;

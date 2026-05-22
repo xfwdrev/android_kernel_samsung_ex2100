@@ -480,17 +480,17 @@ static ssize_t scrub_pos_show(struct device *dev,
 
 #if IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	input_info(true, ts->dev,
-			"%s: id: %d\n", __func__, ts->plat_data->gesture_id);
+			"%s: id: %d\n", __func__, ts->gesture_id);
 #else
 	input_info(true, ts->dev,
 			"%s: id: %d, X:%d, Y:%d\n", __func__,
-			ts->plat_data->gesture_id, ts->plat_data->gesture_x, ts->plat_data->gesture_y);
+			ts->gesture_id, ts->gesture_x, ts->gesture_y);
 #endif
-	snprintf(buff, sizeof(buff), "%d %d %d", ts->plat_data->gesture_id,
-			ts->plat_data->gesture_x, ts->plat_data->gesture_y);
+	snprintf(buff, sizeof(buff), "%d %d %d", ts->gesture_id,
+			ts->gesture_x, ts->gesture_y);
 
-	ts->plat_data->gesture_x = 0;
-	ts->plat_data->gesture_y = 0;
+	ts->gesture_x = 0;
+	ts->gesture_y = 0;
 
 	return snprintf(buf, PAGE_SIZE, "%s", buff);
 }
@@ -968,7 +968,7 @@ static ssize_t debug_info_show(struct device *dev,
 			ts->tdata->nvdata.cal_count, ts->tdata->nvdata.tune_fix_ver,
 			ts->tdata->tclm_string[ts->tdata->nvdata.cal_position].f_name,
 			(ts->tdata->tclm_level == TCLM_LEVEL_LOCKDOWN) ? ".L" : " ",
-			ts->tdata->nvdata.cal_fail_falg, ts->tdata->nvdata.cal_fail_cnt);
+			ts->tdata->nvdata.cal_fail_flag, ts->tdata->nvdata.cal_fail_cnt);
 		strlcat(buff, tbuff, sizeof(buff));
 	}
 #endif
