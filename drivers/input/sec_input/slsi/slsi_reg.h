@@ -30,6 +30,8 @@
 
 /* SEC_TS READ REGISTER ADDRESS */
 #define SLSI_TS_CMD_SENSE_ON			0x10
+#define SLSI_TO_SELFTEST_MODE 4
+#define SLSI_TO_FLASH_MODE 5
 #define SLSI_TS_CMD_SENSE_OFF			0x11
 #define SLSI_TS_CMD_SW_RESET			0x12
 #define SLSI_TS_CMD_CALIBRATION_SEC		0x13	// send it to touch ic, but toucu ic works nothing.
@@ -279,12 +281,6 @@ typedef enum {
 	TOUCH_MODE_STATE_WAKEUP		= 10
 } TOUCH_MODE_STATE;
 
-enum switch_system_mode {
-	TO_TOUCH_MODE			= 0,
-	TO_LOWPOWER_MODE		= 1,
-	TO_SELFTEST_MODE		= 2,
-	TO_FLASH_MODE			= 3,
-};
 
 enum {
 	TYPE_RAW_DATA			= 0,	/* Total - Offset : delta data */

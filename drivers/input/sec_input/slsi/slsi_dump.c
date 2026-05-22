@@ -21,7 +21,7 @@ void slsi_ts_check_rawdata(struct work_struct *work)
 		input_err(true, &ts->client->dev, "%s: ignored ## already checking..\n", __func__);
 		return;
 	}
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: ignored ## IC is power off\n", __func__);
 		return;
 	}
@@ -140,7 +140,7 @@ ssize_t get_selftest_fail_hist_dump_all(struct slsi_ts_data *ts, char *buf, u8 p
 	u16 defective_node_data;
 	struct slsi_ts_selftest_fail_hist *p_fail_hist;
 
-	if (ts->plat_data->power_state != SEC_INPUT_STATE_POWER_ON) {
+	if (atomic_read(&ts->plat_data->power_state) != SEC_INPUT_STATE_POWER_ON) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n", __func__);
 		return -EBUSY;
 	}
@@ -150,7 +150,7 @@ ssize_t get_selftest_fail_hist_dump_all(struct slsi_ts_data *ts, char *buf, u8 p
 		return -EBUSY;
 	}
 
-	if (ts->sec.cmd_is_running) {
+	if (atomic_read(&ts->sec.cmd_is_running)) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] cmd is running\n", __func__);
 		return -EBUSY;
 	}
@@ -313,7 +313,7 @@ ssize_t get_miscal_dump(struct slsi_ts_data *ts, char *buf)
 	char buff[80] = {0, };
 	char data[6] = {0, };
 
-	if (ts->plat_data->power_state != SEC_INPUT_STATE_POWER_ON) {
+	if (atomic_read(&ts->plat_data->power_state) != SEC_INPUT_STATE_POWER_ON) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n", __func__);
 		return -EBUSY;
 	}
@@ -323,7 +323,7 @@ ssize_t get_miscal_dump(struct slsi_ts_data *ts, char *buf)
 		return -EBUSY;
 	}
 
-	if (ts->sec.cmd_is_running) {
+	if (atomic_read(&ts->sec.cmd_is_running)) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] cmd is running\n", __func__);
 		return -EBUSY;
 	}
@@ -438,7 +438,7 @@ ssize_t get_cmoffset_dump_all(struct slsi_ts_data *ts, char *buf, u8 position)
 	char data[6] = {0, };
 	u16 temp;
 
-	if (ts->plat_data->power_state != SEC_INPUT_STATE_POWER_ON) {
+	if (atomic_read(&ts->plat_data->power_state) != SEC_INPUT_STATE_POWER_ON) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n", __func__);
 		return -EBUSY;
 	}
@@ -448,7 +448,7 @@ ssize_t get_cmoffset_dump_all(struct slsi_ts_data *ts, char *buf, u8 position)
 		return -EBUSY;
 	}
 
-	if (ts->sec.cmd_is_running) {
+	if (atomic_read(&ts->sec.cmd_is_running)) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] cmd is running\n", __func__);
 		return -EBUSY;
 	}

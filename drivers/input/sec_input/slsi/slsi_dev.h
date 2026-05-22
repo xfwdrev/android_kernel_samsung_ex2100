@@ -222,6 +222,17 @@ struct slsi_ts_event_coordinate {
 } __attribute__ ((packed));
 
 struct slsi_ts_data {
+	u8 sync_reportrate_120;
+	u16 print_info_currnet_mode;
+	u16 display_x;
+	u16 display_y;
+	u8 gesture_id;
+	u8 gesture_x;
+	u8 gesture_y;
+	u8 core_version_of_bin[4];
+	u8 config_version_of_bin[4];
+	u8 core_version_of_ic[4];
+	u8 config_version_of_ic[4];
 	u32 crc_addr;
 	u32 fw_addr;
 	u32 para_addr;

@@ -72,7 +72,7 @@ int slsi_ts_set_custom_library(struct slsi_ts_data *ts)
 
 #if IS_ENABLED(CONFIG_SEC_FACTORY)
 	/* enable FOD when LCD on state */
-	if (ts->plat_data->support_fod && ts->plat_data->enabled)
+	if (ts->plat_data->support_fod && atomic_read(&ts->plat_data->enabled))
 		force_fod_enable = SEC_TS_MODE_SPONGE_PRESS;
 #endif
 
@@ -140,7 +140,7 @@ void slsi_ts_get_custom_library(struct slsi_ts_data *ts)
 		return;
 	}
 
-	sec_input_set_fod_info(&ts->client->dev, data[0], data[1], data[2]);
+	sec_input_set_fod_info(&ts->client->dev, data[0], data[1], data[2], 0);
 }
 
 int slsi_ts_wait_for_ready(struct slsi_ts_data *ts, u8 reg, u8 *data, int len, int delay)
@@ -224,7 +224,7 @@ int slsi_ts_set_scan_mode(struct slsi_ts_data *ts, int mode)
 	u8 w_data;
 	int ret;
 
-	if (ts->plat_data->shutdown_called)
+	if (atomic_read(&ts->plat_data->shutdown_called))
 		return 0;
 
 	if (ts->plat_data->wirelesscharger_mode != TYPE_WIRELESS_CHARGER_NONE && mode) {
@@ -234,7 +234,7 @@ int slsi_ts_set_scan_mode(struct slsi_ts_data *ts, int mode)
 		return mode;
 	}
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev,
 				"%s: fail to send status(%d), POWER_STATUS=OFF\n",
 				__func__, mode);
@@ -263,7 +263,7 @@ int slsi_ts_set_touch_function(struct slsi_ts_data *ts)
 		input_err(true, &ts->client->dev, "%s: Failed to send command(0x%x)",
 				__func__, SLSI_TS_CMD_SET_TOUCHFUNCTION);
 
-	if (!ts->plat_data->shutdown_called)
+	if (!atomic_read(&ts->plat_data->shutdown_called))
 		schedule_delayed_work(&ts->work_read_functions, msecs_to_jiffies(30));
 
 	return ret;
@@ -344,7 +344,7 @@ int slsi_ts_set_lowpowermode(void *data, u8 mode)
 		if (ret < 0)
 			goto i2c_error;
 	} else {
-		if (!ts->plat_data->shutdown_called)
+		if (!atomic_read(&ts->plat_data->shutdown_called))
 			schedule_work(&ts->work_read_functions.work);
 	}
 
@@ -390,9 +390,9 @@ retry_pmode:
 	}
 
 	if (mode == TO_LOWPOWER_MODE)
-		ts->plat_data->power_state = SEC_INPUT_STATE_LPM;
+		atomic_set(&ts->plat_data->power_state, SEC_INPUT_STATE_LPM);
 	else
-		ts->plat_data->power_state = SEC_INPUT_STATE_POWER_ON;
+		atomic_set(&ts->plat_data->power_state, SEC_INPUT_STATE_POWER_ON);
 
 i2c_error:
 	input_info(true, &ts->client->dev, "%s: end %d\n", __func__, ret);
@@ -453,7 +453,7 @@ void slsi_ts_reset_work(struct work_struct *work)
 		input_err(true, &ts->client->dev, "%s: failed to reset, ret:%d\n", __func__, ret);
 		ts->reset_is_on_going = false;
 		cancel_delayed_work(&ts->reset_work);
-		if (!ts->plat_data->shutdown_called)
+		if (!atomic_read(&ts->plat_data->shutdown_called))
 			schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
 		mutex_unlock(&ts->modechange);
 
@@ -467,7 +467,7 @@ void slsi_ts_reset_work(struct work_struct *work)
 		return;
 	}
 
-	if (!ts->plat_data->enabled) {
+	if (!atomic_read(&ts->plat_data->enabled)) {
 		input_err(true, &ts->client->dev, "%s: call input_close\n", __func__);
 
 		if (ts->plat_data->lowpower_mode || ts->plat_data->ed_enable) {
@@ -476,7 +476,7 @@ void slsi_ts_reset_work(struct work_struct *work)
 				input_err(true, &ts->client->dev, "%s: failed to reset, ret:%d\n", __func__, ret);
 				ts->reset_is_on_going = false;
 				cancel_delayed_work(&ts->reset_work);
-				if (!ts->plat_data->shutdown_called)
+				if (!atomic_read(&ts->plat_data->shutdown_called))
 					schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
 				mutex_unlock(&ts->modechange);
 				__pm_relax(ts->plat_data->sec_ws);
@@ -492,7 +492,7 @@ void slsi_ts_reset_work(struct work_struct *work)
 	ts->reset_is_on_going = false;
 	mutex_unlock(&ts->modechange);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_ON) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_ON) {
 		if (ts->fix_active_mode)
 			slsi_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
 	}
@@ -520,12 +520,12 @@ void slsi_ts_print_info_work(struct work_struct *work)
 
 	sec_input_print_info(&ts->client->dev, ts->tdata);
 
-	if (ts->sec.cmd_is_running)
+	if (atomic_read(&ts->sec.cmd_is_running))
 		input_err(true, &ts->client->dev, "%s: skip set temperature, cmd running\n", __func__);
 	else
 		sec_input_set_temperature(&ts->client->dev, SEC_INPUT_SET_TEMPERATURE_NORMAL);
 
-	if (!ts->plat_data->shutdown_called)
+	if (!atomic_read(&ts->plat_data->shutdown_called))
 		schedule_delayed_work(&ts->work_print_info, msecs_to_jiffies(TOUCH_PRINT_INFO_DWORK_TIME));
 }
 
@@ -568,7 +568,7 @@ void slsi_ts_read_info_work(struct work_struct *work)
 
 	ts->info_work_done = true;
 
-	if (ts->plat_data->shutdown_called) {
+	if (atomic_read(&ts->plat_data->shutdown_called)) {
 		input_err(true, &ts->client->dev, "%s done, do not run work\n", __func__);
 		return;
 	} else {
@@ -584,14 +584,14 @@ int slsi_ts_set_cover_type(struct slsi_ts_data *ts, bool enable)
 	input_info(true, &ts->client->dev, "%s: %s, type:%d\n",
 			__func__, enable ? "close" : "open", ts->plat_data->cover_type);
 
-	cover_cmd = sec_input_check_cover_type(&ts->client->dev) & 0xFF;
+	cover_cmd = ts->plat_data->cover_type & 0xFF;
 
 	if (enable)
 		ts->plat_data->touch_functions |= SLSI_TS_BIT_SETFUNC_COVER;
 	else
 		ts->plat_data->touch_functions &= ~SLSI_TS_BIT_SETFUNC_COVER;
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: pwr off, close:%d, touch_fn:%x\n", __func__,
 				enable, ts->plat_data->touch_functions);
 		return -ENODEV;
@@ -639,7 +639,7 @@ int slsi_ts_set_aod_rect(struct slsi_ts_data *ts)
 	if (ret < 0)
 		input_err(true, &ts->client->dev, "%s: Failed to write sponge\n", __func__);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_LPM) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_LPM) {
 		if (ts->plat_data->aod_data.rect_data[0] == 0 && ts->plat_data->aod_data.rect_data[1] == 0 &&
 			ts->plat_data->aod_data.rect_data[2] == 0 && ts->plat_data->aod_data.rect_data[3] == 0)
 			data[0] = SLSI_TS_CMD_LPM_AOD_OFF;
@@ -835,7 +835,7 @@ int slsi_ts_set_external_noise_mode(struct slsi_ts_data *ts, u8 mode)
 	u8 mode_bit_to_set, check_bit, mode_enable;
 	u8 noise_mode_cmd[EXT_NOISE_MODE_MAX] = { 0 };
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		return -ENODEV;
 	}
@@ -908,7 +908,7 @@ int slsi_ts_p2p_tmode(struct slsi_ts_data *ts)
 {
 	int ret;
 	u8 mode[3] = {0x2F, 0x00, 0xDE};
-	char para = TO_SELFTEST_MODE;
+	char para = SLSI_TO_SELFTEST_MODE;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
@@ -1157,8 +1157,9 @@ int set_tsp_nvm_data_by_size(struct slsi_ts_data *ts, u8 reg, int size, u8 *data
 	return rc;
 }
 
-int sec_tclm_data_read(struct i2c_client *client, int address)
+int sec_tclm_data_read(struct device *dev, int address)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	struct slsi_ts_data *ts = i2c_get_clientdata(client);
 	int ret = 0;
 	u8 buff[4];
@@ -1200,8 +1201,9 @@ int sec_tclm_data_read(struct i2c_client *client, int address)
 	}
 }
 
-int sec_tclm_data_write(struct i2c_client *client, int address)
+int sec_tclm_data_write(struct device *dev, int address)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	struct slsi_ts_data *ts = i2c_get_clientdata(client);
 	int ret = 1;
 	u8 nbuff[SLSI_TS_NVM_OFFSET_LENGTH - SLSI_TS_NVM_OFFSET_CAL_COUNT];

@@ -126,15 +126,15 @@ static void slsi_ts_save_version_of_bin(struct slsi_ts_data *ts, const fw_header
 	ts->plat_data->img_version_of_bin[1] = ((fw_hd->img_ver >> 8) & 0xff);
 	ts->plat_data->img_version_of_bin[0] = ((fw_hd->img_ver >> 0) & 0xff);
 
-	ts->plat_data->core_version_of_bin[3] = ((fw_hd->fw_ver >> 24) & 0xff);
-	ts->plat_data->core_version_of_bin[2] = ((fw_hd->fw_ver >> 16) & 0xff);
-	ts->plat_data->core_version_of_bin[1] = ((fw_hd->fw_ver >> 8) & 0xff);
-	ts->plat_data->core_version_of_bin[0] = ((fw_hd->fw_ver >> 0) & 0xff);
+	ts->core_version_of_bin[3] = ((fw_hd->fw_ver >> 24) & 0xff);
+	ts->core_version_of_bin[2] = ((fw_hd->fw_ver >> 16) & 0xff);
+	ts->core_version_of_bin[1] = ((fw_hd->fw_ver >> 8) & 0xff);
+	ts->core_version_of_bin[0] = ((fw_hd->fw_ver >> 0) & 0xff);
 
-	ts->plat_data->config_version_of_bin[3] = ((fw_hd->para_ver >> 24) & 0xff);
-	ts->plat_data->config_version_of_bin[2] = ((fw_hd->para_ver >> 16) & 0xff);
-	ts->plat_data->config_version_of_bin[1] = ((fw_hd->para_ver >> 8) & 0xff);
-	ts->plat_data->config_version_of_bin[0] = ((fw_hd->para_ver >> 0) & 0xff);
+	ts->config_version_of_bin[3] = ((fw_hd->para_ver >> 24) & 0xff);
+	ts->config_version_of_bin[2] = ((fw_hd->para_ver >> 16) & 0xff);
+	ts->config_version_of_bin[1] = ((fw_hd->para_ver >> 8) & 0xff);
+	ts->config_version_of_bin[0] = ((fw_hd->para_ver >> 0) & 0xff);
 
 	input_info(true, &ts->client->dev, "%s: img_ver of bin = %x.%x.%x.%x\n", __func__,
 			ts->plat_data->img_version_of_bin[0],
@@ -143,16 +143,16 @@ static void slsi_ts_save_version_of_bin(struct slsi_ts_data *ts, const fw_header
 			ts->plat_data->img_version_of_bin[3]);
 
 	input_info(true, &ts->client->dev, "%s: core_ver of bin = %x.%x.%x.%x\n", __func__,
-			ts->plat_data->core_version_of_bin[0],
-			ts->plat_data->core_version_of_bin[1],
-			ts->plat_data->core_version_of_bin[2],
-			ts->plat_data->core_version_of_bin[3]);
+			ts->core_version_of_bin[0],
+			ts->core_version_of_bin[1],
+			ts->core_version_of_bin[2],
+			ts->core_version_of_bin[3]);
 
 	input_info(true, &ts->client->dev, "%s: config_ver of bin = %x.%x.%x.%x\n", __func__,
-			ts->plat_data->config_version_of_bin[0],
-			ts->plat_data->config_version_of_bin[1],
-			ts->plat_data->config_version_of_bin[2],
-			ts->plat_data->config_version_of_bin[3]);
+			ts->config_version_of_bin[0],
+			ts->config_version_of_bin[1],
+			ts->config_version_of_bin[2],
+			ts->config_version_of_bin[3]);
 }
 
 static int slsi_ts_save_version_of_ic(struct slsi_ts_data *ts)
@@ -185,10 +185,10 @@ static int slsi_ts_save_version_of_ic(struct slsi_ts_data *ts)
 	input_info(true, &ts->client->dev, "%s: IC Core version info : %x.%x.%x.%x\n",
 			__func__, core_ver[0], core_ver[1], core_ver[2], core_ver[3]);
 
-	ts->plat_data->core_version_of_ic[0] = core_ver[0];
-	ts->plat_data->core_version_of_ic[1] = core_ver[1];
-	ts->plat_data->core_version_of_ic[2] = core_ver[2];
-	ts->plat_data->core_version_of_ic[3] = core_ver[3];
+	ts->core_version_of_ic[0] = core_ver[0];
+	ts->core_version_of_ic[1] = core_ver[1];
+	ts->core_version_of_ic[2] = core_ver[2];
+	ts->core_version_of_ic[3] = core_ver[3];
 
 	/* Config ver */
 	ret = ts->slsi_ts_i2c_read(ts, SLSI_TS_READ_PARA_VERSION, config_ver, 4);
@@ -199,10 +199,10 @@ static int slsi_ts_save_version_of_ic(struct slsi_ts_data *ts)
 	input_info(true, &ts->client->dev, "%s: IC config version info : %x.%x.%x.%x\n",
 			__func__, config_ver[0], config_ver[1], config_ver[2], config_ver[3]);
 
-	ts->plat_data->config_version_of_ic[0] = config_ver[0];
-	ts->plat_data->config_version_of_ic[1] = config_ver[1];
-	ts->plat_data->config_version_of_ic[2] = config_ver[2];
-	ts->plat_data->config_version_of_ic[3] = config_ver[3];
+	ts->config_version_of_ic[0] = config_ver[0];
+	ts->config_version_of_ic[1] = config_ver[1];
+	ts->config_version_of_ic[2] = config_ver[2];
+	ts->config_version_of_ic[3] = config_ver[3];
 
 	return 1;
 }
@@ -794,7 +794,7 @@ int slsi_ts_firmware_update_on_probe(struct slsi_ts_data *ts, bool force_update)
 
 #ifdef TCLM_CONCEPT
 		while (retry--) {
-			ret = ts->tdata->tclm_read(ts->tdata->client, SEC_TCLM_NVM_ALL_DATA);
+			ret = ts->tdata->tclm_read(ts->tdata->dev, SEC_TCLM_NVM_ALL_DATA);
 			if (ret >= 0)
 				break;
 		}

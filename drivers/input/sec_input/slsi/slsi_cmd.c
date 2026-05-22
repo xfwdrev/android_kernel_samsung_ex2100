@@ -21,17 +21,17 @@ static ssize_t scrub_position_show(struct device *dev,
 
 #if IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	input_info(true, &ts->client->dev,
-			"%s: id: %d\n", __func__, ts->plat_data->gesture_id);
+			"%s: id: %d\n", __func__, ts->gesture_id);
 #else
 	input_info(true, &ts->client->dev,
 			"%s: id: %d, X:%d, Y:%d\n", __func__,
-			ts->plat_data->gesture_id, ts->plat_data->gesture_x, ts->plat_data->gesture_y);
+			ts->gesture_id, ts->gesture_x, ts->gesture_y);
 #endif
-	snprintf(buff, sizeof(buff), "%d %d %d", ts->plat_data->gesture_id,
-			ts->plat_data->gesture_x, ts->plat_data->gesture_y);
+	snprintf(buff, sizeof(buff), "%d %d %d", ts->gesture_id,
+			ts->gesture_x, ts->gesture_y);
 
-	ts->plat_data->gesture_x = 0;
-	ts->plat_data->gesture_y = 0;
+	ts->gesture_x = 0;
+	ts->gesture_y = 0;
 
 	return snprintf(buf, PAGE_SIZE, "%s", buff);
 }
@@ -105,7 +105,7 @@ static ssize_t get_lp_dump(struct device *dev, struct device_attribute *attr, ch
 	unsigned char *sec_spg_dat;
 	u8 dump_clear_packet[3] = {0x01,0x00,0x01};
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "TSP turned off");
 	}
@@ -296,9 +296,9 @@ static ssize_t ic_status_show(struct device *dev,
 	strlcat(buff, temp, sizeof(buff));
 	snprintf(temp, sizeof(temp), "lpm:%d, ", data[0] == TO_LOWPOWER_MODE);
 	strlcat(buff, temp, sizeof(buff));
-	snprintf(temp, sizeof(temp), "test:%d, ", data[0] == TO_SELFTEST_MODE);
+	snprintf(temp, sizeof(temp), "test:%d, ", data[0] == SLSI_TO_SELFTEST_MODE);
 	strlcat(buff, temp, sizeof(buff));
-	snprintf(temp, sizeof(temp), "flash:%d, ", data[0] == TO_FLASH_MODE);
+	snprintf(temp, sizeof(temp), "flash:%d, ", data[0] == SLSI_TO_FLASH_MODE);
 	strlcat(buff, temp, sizeof(buff));
 
 	data[0] = 0;
@@ -413,7 +413,7 @@ static ssize_t sensitivity_mode_store(struct device *dev,
 	if (ret != 0)
 		return ret;
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: power off in IC\n", __func__);
 		return 0;
 	}
@@ -486,7 +486,7 @@ static ssize_t read_support_feature(struct device *dev,
 	if (ts->plat_data->enable_settings_aot)
 		feature |= INPUT_FEATURE_ENABLE_SETTINGS_AOT;
 
-	if (ts->plat_data->sync_reportrate_120)
+	if (ts->sync_reportrate_120)
 		feature |= INPUT_FEATURE_ENABLE_SYNC_RR120;
 
 	if (ts->plat_data->support_vrr)
@@ -1095,7 +1095,7 @@ static void slsi_ts_read_raw_data(struct slsi_ts_data *ts,
 	if (!buff)
 		goto error_alloc_mem;
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		goto error_power_state;
@@ -1192,7 +1192,7 @@ static void fw_update(void *device_data)
 	int retval = 0;
 
 	sec_cmd_set_default_result(sec);
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -1248,7 +1248,7 @@ static void get_fw_ver_ic(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -1289,7 +1289,7 @@ static void get_config_ver(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	snprintf(buff, sizeof(buff), "SE_%02X%02X",
-			ts->plat_data->config_version_of_ic[2], ts->plat_data->config_version_of_ic[3]);
+			ts->config_version_of_ic[2], ts->config_version_of_ic[3]);
 
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
 	sec->cmd_state = SEC_CMD_STATUS_OK;
@@ -1345,7 +1345,7 @@ static void get_threshold(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		goto err;
@@ -1413,9 +1413,9 @@ static void module_on_master(void *device_data)
 
 	ret = ts->plat_data->start_device(ts);
 
-	if (!ts->plat_data->enabled) {
+	if (!atomic_read(&ts->plat_data->enabled)) {
 		ts->plat_data->lpmode(ts, TO_LOWPOWER_MODE);
-		ts->plat_data->power_state = SEC_INPUT_STATE_LPM;
+		atomic_set(&ts->plat_data->power_state, SEC_INPUT_STATE_LPM);
 	}
 
 	if (ret == 0)
@@ -1631,7 +1631,7 @@ static void get_checksum_data(void *device_data)
 	u8 fw_ver[4];
 
 	sec_cmd_set_default_result(sec);
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n", __func__);
 		goto err;
 	}
@@ -1639,11 +1639,11 @@ static void get_checksum_data(void *device_data)
 	disable_irq(ts->client->irq);
 
 	ts->plat_data->power(&ts->client->dev, false);
-	ts->plat_data->power_state = SEC_INPUT_STATE_POWER_OFF;
+	atomic_set(&ts->plat_data->power_state, SEC_INPUT_STATE_POWER_OFF);
 	sec_delay(50);
 
 	ts->plat_data->power(&ts->client->dev, true);
-	ts->plat_data->power_state = SEC_INPUT_STATE_POWER_ON;
+	atomic_set(&ts->plat_data->power_state, SEC_INPUT_STATE_POWER_ON);
 	sec_delay(70);
 
 	ret = slsi_ts_wait_for_ready(ts, SLSI_TS_ACK_BOOT_COMPLETE, NULL, 0, 0);
@@ -1762,7 +1762,7 @@ static void run_jitter_test(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -1777,7 +1777,7 @@ static void run_jitter_test(void *device_data)
 
 	slsi_ts_locked_release_all_finger(ts);
 
-	para = TO_SELFTEST_MODE;
+	para = SLSI_TO_SELFTEST_MODE;
 	ret = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_SET_POWER_MODE, &para, 1);
 	if (ret < 0)
 		goto jitter_ng;
@@ -2127,7 +2127,7 @@ static void run_cmoffset_set_proximity_read_all(void *device_data)
 		goto error_alloc_mem;
 	}
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		goto error_power_state;
@@ -2187,7 +2187,7 @@ static int slsi_ts_read_rawp2p_data(struct slsi_ts_data *ts,
 	char *buff;
 	char para = TO_TOUCH_MODE;
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		goto error_power_state;
@@ -2286,7 +2286,7 @@ static int slsi_ts_read_rawp2p_data_all(struct slsi_ts_data *ts,
 	char buff[SEC_CMD_STR_LEN] = { 0 };
 	char para = TO_TOUCH_MODE;
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		goto error_power_state;
@@ -2708,7 +2708,7 @@ void slsi_ts_run_rawdata_all(struct slsi_ts_data *ts, bool full_read)
 	input_raw_data_clear();
 	input_raw_info(true, &ts->client->dev,
 			"%s: start (noise:%d, wet:%d)##\n",
-			__func__, ts->plat_data->touch_noise_status, ts->plat_data->wet_mode);
+			__func__, atomic_read(&ts->plat_data->touch_noise_status), ts->plat_data->wet_mode);
 
 	ret = slsi_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
 	if (ret < 0) {
@@ -2767,7 +2767,7 @@ out:
 			ts->plat_data->hw_param.ito_test[2], ts->plat_data->hw_param.ito_test[3]);
 
 	input_raw_info(true, &ts->client->dev, "%s: done (noise:%d, wet:%d)##\n",
-			__func__, ts->plat_data->touch_noise_status, ts->plat_data->wet_mode);
+			__func__, atomic_read(&ts->plat_data->touch_noise_status), ts->plat_data->wet_mode);
 	ts->tsp_dump_lock = 0;
 
 	slsi_ts_locked_release_all_finger(ts);
@@ -2787,7 +2787,7 @@ static void run_rawdata_read_all(void *device_data)
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
 		goto out;
 	}
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: IC is power off\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -2816,7 +2816,7 @@ static void set_tsp_test_result(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -2882,7 +2882,7 @@ static void get_tsp_test_result(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -2932,7 +2932,7 @@ static void clear_tsp_test_result(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -2975,7 +2975,7 @@ static void increase_disassemble_count(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -3027,7 +3027,7 @@ static void get_disassemble_count(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		snprintf(buff, sizeof(buff), "NG");
@@ -3105,7 +3105,7 @@ static void run_trx_short_test(void *device_data)
 	else
 		snprintf(test, sizeof(test), "TEST=%d", sec->cmd_param[0]);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
@@ -3390,7 +3390,7 @@ static void run_elvss_test(void *device_data)
 
 	disable_irq(ts->client->irq);
 
-	para = TO_SELFTEST_MODE;
+	para = SLSI_TO_SELFTEST_MODE;
 	ret = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_SET_POWER_MODE, &para, 1);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: failed power mode\n", __func__);
@@ -3492,19 +3492,20 @@ static int slsi_ts_execute_force_calibration(struct slsi_ts_data *ts, int cal_mo
 
 	if (rc < 0) {
 		ts->tdata->nvdata.cal_fail_cnt++;
-		ts->tdata->nvdata.cal_fail_falg = 0;
-		ts->tdata->tclm_write(ts->tdata->client, SEC_TCLM_NVM_ALL_DATA);
+		ts->tdata->nvdata.cal_fail_flag = 0;
+		ts->tdata->tclm_write(ts->tdata->dev, SEC_TCLM_NVM_ALL_DATA);
 		return rc;
 	}
 
-	ts->tdata->nvdata.cal_fail_falg = SEC_CAL_PASS;
-	ts->tdata->tclm_write(ts->tdata->client, SEC_TCLM_NVM_ALL_DATA);
+	ts->tdata->nvdata.cal_fail_flag = SEC_CAL_PASS;
+	ts->tdata->tclm_write(ts->tdata->dev, SEC_TCLM_NVM_ALL_DATA);
 #endif
 	return rc;
 }
 
-int sec_tclm_execute_force_calibration(struct i2c_client *client, int cal_mode)
+int sec_tclm_execute_force_calibration(struct device *dev, int cal_mode)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	struct slsi_ts_data *ts = i2c_get_clientdata(client);
 	int rc;
 	/* cal_mode is same tclm and sec. if they are different, modify source */
@@ -3522,7 +3523,7 @@ static void run_force_calibration(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		snprintf(buff, sizeof(buff), "NG");
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
 		goto out_force_cal_before_irq_ctrl;
@@ -3583,7 +3584,7 @@ static void get_force_calibration(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
@@ -3619,7 +3620,7 @@ static void run_miscalibration(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		goto err_power_state;
 	}
@@ -3701,7 +3702,7 @@ static void run_factory_miscalibration(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
 				__func__);
 		goto error_power_state;
@@ -3769,7 +3770,7 @@ static void get_idle_dvdd(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF)
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF)
 		goto err_power_state;
 
 	disable_irq(ts->client->irq);
@@ -3846,7 +3847,7 @@ static void run_sram_test(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF)
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF)
 		goto err_power_state;
 
 	disable_irq(ts->client->irq);
@@ -3914,7 +3915,7 @@ static void run_differential_test(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF)
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF)
 		goto err_power_state;
 
 	disable_irq(ts->client->irq);
@@ -3986,7 +3987,7 @@ static void factory_cmd_result_all(void *device_data)
 		sec->cmd_all_factory_state = SEC_CMD_STATUS_FAIL;
 		goto out;
 	}
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: IC is power off\n", __func__);
 		sec->cmd_all_factory_state = SEC_CMD_STATUS_FAIL;
 		goto out;
@@ -4081,7 +4082,7 @@ static void run_prox_intensity_read_all(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -4175,7 +4176,7 @@ static void get_crc_check(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -4222,7 +4223,7 @@ static void set_log_level(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
@@ -4309,7 +4310,7 @@ static void set_factory_level(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		goto NG;
 	}
@@ -4362,7 +4363,7 @@ static void check_connection(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
@@ -4475,14 +4476,14 @@ static void fix_active_mode(void *device_data)
 
 	ts->fix_active_mode = sec->cmd_param[0];
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
 		goto out;
 	}
 
-	if (ts->plat_data->power_state != SEC_INPUT_STATE_LPM) {
+	if (atomic_read(&ts->plat_data->power_state) != SEC_INPUT_STATE_LPM) {
 		if (ts->fix_active_mode)
 			slsi_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
 		else
@@ -4547,7 +4548,7 @@ static void fp_int_control(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		goto NG;
 	}
@@ -4960,7 +4961,7 @@ static void set_fod_rect(void *device_data)
 	if (!sec_input_set_fod_rect(&ts->client->dev, sec->cmd_param))
 		goto NG;
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped! Set data at reinit()\n", __func__);
 		goto OK;
 	}
@@ -5019,8 +5020,8 @@ static void fod_enable(void *device_data)
 			ts->plat_data->lowpower_mode);
 
 	mutex_lock(&ts->modechange);
-	if (!ts->plat_data->enabled && !ts->plat_data->lowpower_mode && !ts->plat_data->ed_enable) {
-		if (device_may_wakeup(&ts->client->dev) && ts->plat_data->power_state == SEC_INPUT_STATE_LPM)
+	if (!atomic_read(&ts->plat_data->enabled) && !ts->plat_data->lowpower_mode && !ts->plat_data->ed_enable) {
+		if (device_may_wakeup(&ts->client->dev) && atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_LPM)
 			disable_irq_wake(ts->client->irq);
 		ts->plat_data->stop_device(ts);
 	} else { 
@@ -5391,7 +5392,7 @@ static void set_touchable_area(void *device_data)
 
 	ts->plat_data->touchable_area = sec->cmd_param[0];
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -5425,7 +5426,7 @@ static void set_low_power_sensitivity(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
+	if (atomic_read(&ts->plat_data->power_state) == SEC_INPUT_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n", __func__);
 		snprintf(buff, sizeof(buff), "NG");
 		goto out;
@@ -5712,20 +5713,11 @@ int slsi_ts_fn_init(struct slsi_ts_data *ts)
 {
 	int retval = 0;
 
-	retval = sec_cmd_init(&ts->sec, sec_cmds,
-			ARRAY_SIZE(sec_cmds), SEC_CLASS_DEVT_TSP);
+	retval = sec_cmd_init(&ts->sec, &ts->client->dev, sec_cmds,
+			ARRAY_SIZE(sec_cmds), SEC_CLASS_DEVT_TSP, &cmd_attr_group);
 	if (retval < 0) {
 		input_err(true, &ts->client->dev,
 				"%s: Failed to sec_cmd_init\n", __func__);
-		goto exit;
-	}
-
-	retval = sysfs_create_group(&ts->sec.fac_dev->kobj,
-			&cmd_attr_group);
-	if (retval < 0) {
-		input_err(true, &ts->client->dev,
-				"%s: Failed to create sysfs attributes\n", __func__);
-		sec_cmd_exit(&ts->sec, SEC_CLASS_DEVT_TSP);
 		goto exit;
 	}
 
@@ -5735,18 +5727,7 @@ int slsi_ts_fn_init(struct slsi_ts_data *ts)
 		input_err(true, &ts->client->dev,
 				"%s: Failed to create input symbolic link\n",
 				__func__);
-		sysfs_remove_group(&ts->sec.fac_dev->kobj, &cmd_attr_group);
 		sec_cmd_exit(&ts->sec, SEC_CLASS_DEVT_TSP);
-		goto exit;
-	}
-
-	retval = sec_input_sysfs_create(&ts->plat_data->input_dev->dev.kobj);
-	if (retval < 0) {
-		sysfs_remove_link(&ts->sec.fac_dev->kobj, "input");
-		sysfs_remove_group(&ts->sec.fac_dev->kobj, &cmd_attr_group);
-		sec_cmd_exit(&ts->sec, SEC_CLASS_DEVT_TSP);
-		input_err(true, &ts->client->dev,
-				"%s: Failed to create sec_input_sysfs attributes\n", __func__);
 		goto exit;
 	}
 
@@ -5760,12 +5741,7 @@ void slsi_ts_fn_remove(struct slsi_ts_data *ts)
 {
 	input_err(true, &ts->client->dev, "%s\n", __func__);
 
-	sec_input_sysfs_remove(&ts->plat_data->input_dev->dev.kobj);
-
 	sysfs_remove_link(&ts->sec.fac_dev->kobj, "input");
-
-	sysfs_remove_group(&ts->sec.fac_dev->kobj,
-			&cmd_attr_group);
 
 	sec_cmd_exit(&ts->sec, SEC_CLASS_DEVT_TSP);
 }
