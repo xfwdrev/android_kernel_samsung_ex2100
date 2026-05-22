@@ -13,3 +13,9 @@ config EPEN_WACOM_WEZ01
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called wacom.
+
+config EPEN_WACOM_W9020
+	bool "Wacom W9020 penabled i2c touchscreen"
+	depends on EPEN_WACOM_WEZ01
+	help
+	  Say Y here if you are using the W9020 digitizer instead of WEZ01.
