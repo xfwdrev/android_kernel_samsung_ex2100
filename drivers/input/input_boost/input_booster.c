@@ -204,7 +204,7 @@ void trigger_input_booster(struct work_struct *work)
 		// Make ib instance with all needed factor.
 		ib = create_ib_instance(p_IbTrigger, uniq_id);
 
-		pr_info(ITAG" IB Trigger Press :: IB Uniq Id(%d)", uniq_id);
+		pr_booster(" IB Trigger Press :: IB Uniq Id(%d)", uniq_id);
 
 		if (ib == NULL) {
 			mutex_unlock(&trigger_ib_lock);
@@ -259,7 +259,7 @@ void trigger_input_booster(struct work_struct *work)
 		mutex_unlock(&mem_lock);
 
 		mutex_lock(&ib->lock);
-		pr_info(ITAG" IB Trigger Release :: Uniq ID(%d)", ib->uniq_id);
+		pr_booster(" IB Trigger Release :: Uniq ID(%d)", ib->uniq_id);
 		ib->rel_flag = FLAG_ON;
 		if(ib->ib_dt->tail_time == 0) {
 			pr_booster(" IB tail time is 0");
@@ -379,7 +379,7 @@ void press_state_func(struct work_struct* work)
 
 	struct t_ib_info* target_ib = container_of(work, struct t_ib_info, ib_state_work[IB_HEAD]);
 
-	pr_info(ITAG" Press State Func :::: Unique_Id(%d)", target_ib->uniq_id);
+	pr_booster(" Press State Func :::: Unique_Id(%d)", target_ib->uniq_id);
 
 	// Get_Res_List(head) and update head value.
 	for (res_type = 0; res_type < allowed_res_count; res_type++) {
@@ -420,7 +420,7 @@ void press_timeout_func(struct work_struct* work)
 	if (!target_ib)
 		return;
 
-	pr_info(ITAG" Press Timeout Func :::: Unique_Id(%d) Tail_Time(%d)",
+	pr_booster(" Press Timeout Func :::: Unique_Id(%d) Tail_Time(%d)",
 		target_ib->uniq_id, target_ib->ib_dt->tail_time);
 
 	int res_type;
@@ -499,7 +499,7 @@ void release_state_func(struct work_struct* work)
 
 	target_ib->isHeadFinished = 1;
 
-	pr_info(ITAG" Release State Func :::: Unique_Id(%d) Rel_Flag(%d)",
+	pr_booster(" Release State Func :::: Unique_Id(%d) Rel_Flag(%d)",
 		target_ib->uniq_id, target_ib->rel_flag);
 
 	for (res_type = 0; res_type < allowed_res_count; res_type++) {
@@ -554,7 +554,7 @@ void release_timeout_func(struct work_struct* work)
 	if(!target_ib)
 		return;
 
-	pr_info(ITAG" Release Timeout Func :::: Unique_Id(%d)", target_ib->uniq_id);
+	pr_booster(" Release Timeout Func :::: Unique_Id(%d)", target_ib->uniq_id);
 	mutex_lock(&sip_rel_lock);
 	for (res_type = 0; res_type < allowed_res_count; res_type++) {
 		res = target_ib->ib_dt->res[allowed_resources[res_type]];
@@ -662,7 +662,7 @@ void remove_ib_instance(struct t_ib_info* target_ib)
 		list_del_rcu(&(target_ib->list));
 		spin_unlock(&write_ib_lock);
 		synchronize_rcu();
-		pr_info(ITAG" Del Ib Instance's Id : %d", target_ib->uniq_id);
+		pr_booster(" Del Ib Instance's Id : %d", target_ib->uniq_id);
 		mutex_lock(&mem_lock);
 		if (target_ib != NULL) {
 			kfree(target_ib);

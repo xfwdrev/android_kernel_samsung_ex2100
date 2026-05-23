@@ -345,7 +345,7 @@ static void evdev_events(struct input_handle *handle,
 	spin_lock(&ib_idx_lock);
 	cur_ib_idx = ib_work_cnt++;
 	if (ib_work_cnt >= MAX_IB_COUNT) {
-		pr_info("[Input Booster] Ib_Work_Cnt(%d), Event_Cnt(%d)", ib_work_cnt, count);
+		pr_debug("[Input Booster] Ib_Work_Cnt(%d), Event_Cnt(%d)", ib_work_cnt, count);
 		ib_work_cnt = 0;
 	}
 
