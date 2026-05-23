@@ -2670,16 +2670,7 @@ void synaptics_set_grip_data_to_ic(struct device *dev, u8 flag)
 		payload[7] = (ts->plat_data->grip_data.deadzone_dn_x >> 8) & 0xFF;
 		payload[8] = ts->plat_data->grip_data.deadzone_y & 0xFF;
 		payload[9] = (ts->plat_data->grip_data.deadzone_y >> 8) & 0xFF;
-		if (GET_DEV_COUNT(ts->multi_dev) == MULTI_DEV_SUB) {
-			/* temporary */
-			payload_size = 10;
-		} else {
-			payload[10] = ts->plat_data->grip_data.deadzone_dn2_x & 0xFF;
-			payload[11] = (ts->plat_data->grip_data.deadzone_dn2_x >> 8) & 0xFF;
-			payload[12] = ts->plat_data->grip_data.deadzone_dn_y & 0xFF;
-			payload[13] = (ts->plat_data->grip_data.deadzone_dn_y >> 8) & 0xFF;
-			payload_size = 14;
-		}
+		payload_size = 10;
 		if (synaptics_ts_write_grip_data(ts, payload, payload_size) < 0)
 			return;
 	}
