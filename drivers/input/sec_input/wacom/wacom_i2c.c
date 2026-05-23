@@ -2870,7 +2870,7 @@ static struct wacom_g5_platform_data *wacom_parse_dt(struct i2c_client *client)
 	}
 
 	pdata->regulator_boot_on = of_property_read_bool(np, "wacom,regulator_boot_on");
-	pdata->enable_sysinput_enabled = of_property_read_bool(np, "wacom,enable_sysinput_enabled");
+	pdata->enable_sysinput_enabled = true;
 
 	ret = of_property_read_u32(np, "wacom,bringup", &pdata->bringup);
 	if (ret) {

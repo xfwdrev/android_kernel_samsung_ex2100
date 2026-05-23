@@ -1106,6 +1106,18 @@ static ssize_t enabled_store(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 
 	ret = sscanf(buf, "%d,%d", &buff[0], &buff[1]);
+	if (ret == 1) {
+		if (buff[0] == 0) {
+			buff[0] = DISPLAY_STATE_OFF;
+			buff[1] = DISPLAY_EVENT_EARLY;
+			ret = 2;
+		} else if (buff[0] == 1) {
+			buff[0] = DISPLAY_STATE_ON;
+			buff[1] = DISPLAY_EVENT_LATE;
+			ret = 2;
+		}
+	}
+
 	if (ret != 2) {
 		input_err(true, &g_wac_i2c->client->dev,
 				"%s: failed read params [%d]\n", __func__, ret);

@@ -268,7 +268,7 @@ void sec_input_support_feature_parse_dt(struct device *dev)
 	input_info(true, dev, "%s: Prox LP Scan enabled %s\n",
 				__func__, pdata->prox_lp_scan_enabled ? "ON" : "OFF");
 
-	pdata->enable_sysinput_enabled = of_property_read_bool(np, "sec,enable_sysinput_enabled");
+	pdata->enable_sysinput_enabled = true;
 	input_info(true, dev, "%s: Sysinput enabled %s\n",
 				__func__, pdata->enable_sysinput_enabled ? "ON" : "OFF");
 
