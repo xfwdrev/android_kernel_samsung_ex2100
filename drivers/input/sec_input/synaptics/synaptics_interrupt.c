@@ -169,7 +169,7 @@ static void synaptics_ts_status_event(struct synaptics_ts_data *ts, u8 *event_bu
 	p_event_status = (struct sec_status_event_data *)event_buff;
 
 	if (p_event_status->data[0] > 0)
-		input_info(true, ts->dev, "%s: STATUS %x %x %x %x %x %x %x %x\n", __func__,
+		input_dbg(true, ts->dev, "%s: STATUS %x %x %x %x %x %x %x %x\n", __func__,
 				event_buff[0], event_buff[1], event_buff[2],
 				event_buff[3], event_buff[4], event_buff[5],
 				event_buff[6], event_buff[7]);
@@ -228,7 +228,7 @@ static void synaptics_ts_status_event(struct synaptics_ts_data *ts, u8 *event_bu
 			input_err(true, ts->dev,
 					"%s: NSM state 0x%02x\n", __func__, p_event_status->status_data_1);
 		} else if (p_event_status->status_id == SYNAPTICS_TS_STATUS_EVENT_VENDOR_BASELINE_ERROR) {
-			input_err(true, ts->dev,
+			input_dbg(true, ts->dev,
 					"%s: baseline 0x%02x, relax:0x%02x\n",
 					__func__, p_event_status->status_data_1, p_event_status->status_data_2);
 		} else if (p_event_status->status_id == SYNAPTICS_TS_STATUS_EVENT_VENDOR_NSM_FREQ) {

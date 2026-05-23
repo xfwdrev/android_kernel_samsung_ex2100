@@ -295,7 +295,7 @@ void sec_input_coord_event_fill_slot(struct device *dev, int t_id)
 	if ((pdata->coord[t_id].action == SEC_TS_COORDINATE_ACTION_PRESS)
 			|| (pdata->coord[t_id].action == SEC_TS_COORDINATE_ACTION_MOVE)) {
 		if (pdata->coord[t_id].ttype != pdata->prev_coord[t_id].ttype) {
-			input_info(true, dev, "%s : tID:%d ttype(%x->%x)\n",
+			input_dbg(true, dev, "%s : tID:%d ttype(%x->%x)\n",
 					__func__, pdata->coord[t_id].id,
 					pdata->prev_coord[t_id].ttype, pdata->coord[t_id].ttype);
 		}
@@ -384,7 +384,7 @@ void sec_input_coord_log(struct device *dev, u8 t_id, int action)
 static void coord_log_press(struct sec_ts_plat_data *pdata, u8 t_id, const char *action)
 {
 #if !IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP)
-	input_info(true, pdata->dev,
+	input_dbg(true, pdata->dev,
 			"[%s] tID:%d.%d x:%d y:%d z:%d major:%d minor:%d loc:%s tc:%d type:%X noise:(%x,%d%d), nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
 			action, t_id, input_mt_get_value(&pdata->input_dev->mt->slots[t_id], ABS_MT_TRACKING_ID),
 			pdata->coord[t_id].x, pdata->coord[t_id].y, pdata->coord[t_id].z,
@@ -396,7 +396,7 @@ static void coord_log_press(struct sec_ts_plat_data *pdata, u8 t_id, const char 
 			pdata->coord[t_id].max_strength, pdata->coord[t_id].hover_id_num,
 			pdata->coord[t_id].freq_id, pdata->coord[t_id].fod_debug);
 #else
-	input_info(true, pdata->dev,
+	input_dbg(true, pdata->dev,
 			"[%s] tID:%d.%d z:%d major:%d minor:%d loc:%s tc:%d type:%X noise:(%x,%d%d), nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
 			action, t_id, input_mt_get_value(&pdata->input_dev->mt->slots[t_id], ABS_MT_TRACKING_ID),
 			pdata->coord[t_id].z, pdata->coord[t_id].major,
@@ -412,7 +412,7 @@ static void coord_log_press(struct sec_ts_plat_data *pdata, u8 t_id, const char 
 static void coord_log_release(struct sec_ts_plat_data *pdata, u8 t_id, const char *action)
 {
 #if !IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP)
-	input_info(true, pdata->dev,
+	input_dbg(true, pdata->dev,
 			"[%s] tID:%d loc:%s dd:%d,%d mc:%d tc:%d lx:%d ly:%d p:%d noise:(%x,%d%d) nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
 			action, t_id, pdata->location,
 			pdata->coord[t_id].x - pdata->coord[t_id].p_x,
@@ -425,7 +425,7 @@ static void coord_log_release(struct sec_ts_plat_data *pdata, u8 t_id, const cha
 			pdata->coord[t_id].max_strength, pdata->coord[t_id].hover_id_num,
 			pdata->coord[t_id].freq_id, pdata->coord[t_id].fod_debug);
 #else
-	input_info(true, pdata->dev,
+	input_dbg(true, pdata->dev,
 			"[%s] tID:%d loc:%s dd:%d,%d mc:%d tc:%d p:%d noise:(%x,%d%d) nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
 			action, t_id, pdata->location,
 			pdata->coord[t_id].x - pdata->coord[t_id].p_x,

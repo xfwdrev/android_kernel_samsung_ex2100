@@ -916,7 +916,7 @@ static void slsi_ts_status_event(struct slsi_ts_data *ts, u8 *event_buff)
 	p_event_status = (struct slsi_ts_event_status *)event_buff;
 
 	if (p_event_status->stype > 0)
-		input_info(true, &ts->client->dev, "%s: STATUS %x %x %x %x %x %x %x %x\n", __func__,
+		input_dbg(true, &ts->client->dev, "%s: STATUS %x %x %x %x %x %x %x %x\n", __func__,
 				event_buff[0], event_buff[1], event_buff[2],
 				event_buff[3], event_buff[4], event_buff[5],
 				event_buff[6], event_buff[7]);
