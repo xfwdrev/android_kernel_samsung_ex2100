@@ -897,7 +897,7 @@ static void slsi_ts_coordinate_event(struct slsi_ts_data *ts, u8 *event_buff)
 				|| (ts->plat_data->coord[t_id].ttype == SLSI_TS_TOUCHTYPE_PALM)
 				|| (ts->plat_data->coord[t_id].ttype == SLSI_TS_TOUCHTYPE_WET)
 				|| (ts->plat_data->coord[t_id].ttype == SLSI_TS_TOUCHTYPE_GLOVE)) {
-			sec_input_coord_report(&ts->client->dev, t_id);
+			sec_input_coord_event_fill_slot(&ts->client->dev, t_id);
 		} else {
 			input_err(true, &ts->client->dev,
 					"%s: do not support coordinate type(%d)\n",
@@ -1104,6 +1104,7 @@ irqreturn_t slsi_ts_irq_thread(int irq, void *ptr)
 		remain_event_count--;
 	} while (remain_event_count >= 0);
 
+	sec_input_coord_event_sync_slot(&ts->client->dev);
 	slsi_ts_external_func(ts);
 
 	mutex_unlock(&ts->eventlock);
