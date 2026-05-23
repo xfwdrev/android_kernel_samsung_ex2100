@@ -1197,7 +1197,7 @@ err_alloc_queue:
 err_alloc_cmd_result:
 	mutex_destroy(&data->cmd_lock);
 	list_del(&data->cmd_list_head);
-	input_fail_hist(true, data->fac_dev, "%s: failed\n", __func__);
+	input_fail_hist(true, dev, "%s: failed\n", __func__);
 
 	return -ENODEV;
 }
