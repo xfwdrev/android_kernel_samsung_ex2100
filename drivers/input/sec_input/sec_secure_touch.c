@@ -85,6 +85,11 @@ void sec_secure_touch_unregister(int dev_num)
 
 	pr_info("%s: %s\n", SECLOG, __func__);
 
+	if (!data) {
+		pr_info("%s %s: null\n", SECLOG, __func__);
+		return;
+	}
+
 	data->touch_driver[number].drv_number = 0;
 	data->touch_driver[number].drv_data = NULL;
 	data->touch_driver[number].kobj = NULL;
@@ -97,12 +102,13 @@ EXPORT_SYMBOL(sec_secure_touch_unregister);
 
 void sec_secure_touch_sysfs_notify(struct sec_secure_touch *data)
 {
-	if (!data)
-		sysfs_notify(&g_ss_touch->device->kobj, NULL, "secure_touch");
-	else
-		sysfs_notify(&data->device->kobj, NULL, "secure_touch");
+	struct sec_secure_touch *ss_touch = data ? data : g_ss_touch;
 
-	dev_info(&g_ss_touch->pdev->dev, "%s\n", __func__);
+	if (!ss_touch)
+		return;
+
+	sysfs_notify(&ss_touch->device->kobj, NULL, "secure_touch");
+	dev_info(&ss_touch->pdev->dev, "%s\n", __func__);
 }
 
 static ssize_t dev_count_show(struct device *dev,
