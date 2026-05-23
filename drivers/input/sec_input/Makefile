@@ -1,7 +1,7 @@
 TARGET = sec_common_fn
 TESTTARGET = sec_input_test
 
-$(TARGET)-objs := sec_input.o sec_input_irq.o sec_input_report.o spu-sign-verify.o \
+$(TARGET)-objs := sec_input.o sec_input_irq.o sec_input_report.o \
                   sec_input_stui.o sec_input_ic_setting.o sec_input_parsedt.o sec_cmd.o sec_cmd_io.o
 
 ifneq ($(filter y m, $(CONFIG_SEC_DEBUG_TSP_LOG)),)
