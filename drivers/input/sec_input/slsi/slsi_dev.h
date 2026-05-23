@@ -65,7 +65,7 @@
 #include "../sec_input.h"
 #include "../sec_tsp_log.h"
 
-#if IS_ENABLED(CONFIG_EXYNOS_DPU30)
+#if IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_EXYNOS_DECON_DQE)
 #include <linux/panel_notify.h>
 #endif
 

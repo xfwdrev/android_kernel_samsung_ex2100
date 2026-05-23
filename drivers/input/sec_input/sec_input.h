@@ -236,7 +236,7 @@ const struct file_operations ops_name = {				\
 #endif
 #define SW_PEN_REVERSE_INSERT	0x0d  /* set = pen reverse insert, remove */
 
-#define EXYNOS_DISPLAY_INPUT_NOTIFIER ((IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_DRM_SAMSUNG_DPU)) && IS_ENABLED(CONFIG_PANEL_NOTIFY))
+#define EXYNOS_DISPLAY_INPUT_NOTIFIER ((IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_EXYNOS_DECON_DQE) || IS_ENABLED(CONFIG_DRM_SAMSUNG_DPU)) && IS_ENABLED(CONFIG_PANEL_NOTIFY))
 
 enum grip_write_mode {
 	G_NONE				= 0,
@@ -908,7 +908,7 @@ struct sec_ts_secure_data {
 extern int get_lcd_attached(char *mode);
 #endif
 
-#if IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_MCD_PANEL) || IS_ENABLED(CONFIG_USDM_PANEL)
+#if IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_EXYNOS_DECON_DQE) || IS_ENABLED(CONFIG_MCD_PANEL) || IS_ENABLED(CONFIG_USDM_PANEL)
 extern int get_lcd_info(char *arg);
 #endif
 

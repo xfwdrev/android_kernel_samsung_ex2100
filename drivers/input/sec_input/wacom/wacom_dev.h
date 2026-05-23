@@ -588,7 +588,7 @@ extern struct wacom_i2c *g_wac_i2c;
 #if IS_ENABLED(CONFIG_DISPLAY_SAMSUNG)
 extern int get_lcd_attached(char *mode);
 #endif
-#if IS_ENABLED(CONFIG_EXYNOS_DPU30)
+#if IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_EXYNOS_DECON_DQE)
 extern int get_lcd_info(char *arg);
 #endif
 
