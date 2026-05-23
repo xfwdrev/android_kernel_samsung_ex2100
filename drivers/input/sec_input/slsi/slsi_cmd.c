@@ -444,75 +444,7 @@ static ssize_t sensitivity_mode_store(struct device *dev,
 	return count;
 }
 
-static ssize_t prox_power_off_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct sec_cmd_data *sec = dev_get_drvdata(dev);
-	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
 
-	input_info(true, &ts->client->dev, "%s: %d\n", __func__,
-			ts->plat_data->prox_power_off);
-
-	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", ts->plat_data->prox_power_off);
-}
-
-static ssize_t prox_power_off_store(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	struct sec_cmd_data *sec = dev_get_drvdata(dev);
-	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
-	long data;
-	int ret;
-
-	ret = kstrtol(buf, 10, &data);
-	if (ret < 0)
-		return ret;
-
-	input_info(true, &ts->client->dev, "%s: %ld\n", __func__, data);
-
-	ts->plat_data->prox_power_off = data;
-
-	return count;
-}
-
-static ssize_t read_support_feature(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct sec_cmd_data *sec = dev_get_drvdata(dev);
-	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
-	u32 feature = 0;
-
-	if (ts->plat_data->enable_settings_aot)
-		feature |= INPUT_FEATURE_ENABLE_SETTINGS_AOT;
-
-	if (ts->sync_reportrate_120)
-		feature |= INPUT_FEATURE_ENABLE_SYNC_RR120;
-
-	if (ts->plat_data->support_vrr)
-		feature |= INPUT_FEATURE_ENABLE_VRR;
-
-	if (ts->plat_data->support_open_short_test)
-		feature |= INPUT_FEATURE_SUPPORT_OPEN_SHORT_TEST;
-
-	if (ts->plat_data->support_mis_calibration_test)
-		feature |= INPUT_FEATURE_SUPPORT_MIS_CALIBRATION_TEST;
-
-	if (ts->plat_data->support_wireless_tx)
-		feature |= INPUT_FEATURE_SUPPORT_WIRELESS_TX;
-
-	input_info(true, &ts->client->dev, "%s: %d%s%s%s%s%s%s%s\n",
-			__func__, feature,
-			feature & INPUT_FEATURE_ENABLE_SETTINGS_AOT ? " aot" : "",
-			feature & INPUT_FEATURE_ENABLE_PRESSURE ? " pressure" : "",
-			feature & INPUT_FEATURE_ENABLE_SYNC_RR120 ? " RR120hz" : "",
-			feature & INPUT_FEATURE_ENABLE_VRR ? " vrr" : "",
-			feature & INPUT_FEATURE_SUPPORT_OPEN_SHORT_TEST ? " openshort" : "",
-			feature & INPUT_FEATURE_SUPPORT_MIS_CALIBRATION_TEST ? " miscal" : "",
-			feature & INPUT_FEATURE_SUPPORT_WIRELESS_TX ? " wirelesstx" : "");
-
-	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", feature);
-}
 
 static ssize_t slsi_ts_fod_position_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -576,8 +508,6 @@ static DEVICE_ATTR(hw_param, 0664, hardware_param_show, hardware_param_store); /
 static DEVICE_ATTR(get_lp_dump, 0444, get_lp_dump, NULL);
 static DEVICE_ATTR(status, 0444, ic_status_show, NULL);
 static DEVICE_ATTR(sensitivity_mode, 0664, sensitivity_mode_show, sensitivity_mode_store);
-static DEVICE_ATTR(prox_power_off, 0664, prox_power_off_show, prox_power_off_store);
-static DEVICE_ATTR(support_feature, 0444, read_support_feature, NULL);
 static DEVICE_ATTR(fod_pos, 0444, slsi_ts_fod_position_show, NULL);
 static DEVICE_ATTR(fod_info, 0444, slsi_ts_fod_info_show, NULL);
 static DEVICE_ATTR(aod_active_area, 0444, aod_active_area, NULL);
@@ -588,8 +518,6 @@ static struct attribute *cmd_attributes[] = {
 	&dev_attr_get_lp_dump.attr,
 	&dev_attr_status.attr,
 	&dev_attr_sensitivity_mode.attr,
-	&dev_attr_prox_power_off.attr,
-	&dev_attr_support_feature.attr,
 	&dev_attr_fod_pos.attr,
 	&dev_attr_fod_info.attr,
 	&dev_attr_aod_active_area.attr,
