@@ -60,7 +60,6 @@
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUMP_MODE)
 #include "../sec_tsp_dumpkey.h"
-extern struct tsp_dump_callbacks dump_callbacks;
 #endif
 
 #include "../sec_input.h"

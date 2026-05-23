@@ -1555,7 +1555,7 @@ static int slsi_ts_init(struct i2c_client *client)
 	sec_secure_touch_register(ts, &ts->client->dev, ts->plat_data->ss_touch_num, &ts->plat_data->input_dev->dev.kobj);
 #endif
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUMP_MODE)
-	dump_callbacks.inform_dump = slsi_ts_dump_tsp_log;
+	sec_input_dumpkey_register(0, slsi_ts_dump_tsp_log, &ts->client->dev);
 	INIT_DELAYED_WORK(&ts->check_rawdata, slsi_ts_check_rawdata);
 #endif
 #if !IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP)
@@ -1597,7 +1597,7 @@ void slsi_ts_release(struct i2c_client *client)
 	flush_delayed_work(&ts->reset_work);
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUMP_MODE)
 	cancel_delayed_work_sync(&ts->check_rawdata);
-	dump_callbacks.inform_dump = NULL;
+	sec_input_dumpkey_unregister(0);
 #endif
 
 	slsi_ts_ioctl_remove(ts);
