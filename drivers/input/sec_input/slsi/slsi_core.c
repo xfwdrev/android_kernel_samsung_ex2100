@@ -1222,6 +1222,21 @@ out:
 	return 0;
 }
 
+static int slsi_ts_enable(struct device *dev)
+{
+	struct slsi_ts_data *ts = dev_get_drvdata(dev);
+
+	return slsi_ts_input_open(ts->plat_data->input_dev);
+}
+
+static int slsi_ts_disable(struct device *dev)
+{
+	struct slsi_ts_data *ts = dev_get_drvdata(dev);
+
+	slsi_ts_input_close(ts->plat_data->input_dev);
+	return 0;
+}
+
 int slsi_ts_start_device(void *data)
 {
 	struct slsi_ts_data *ts = (struct slsi_ts_data *)data;
@@ -1485,6 +1500,8 @@ static int slsi_ts_init(struct i2c_client *client)
 	ts->plat_data->lpmode = slsi_ts_set_lowpowermode;
 	ts->plat_data->set_grip_data = slsi_set_grip_data_to_ic;
 	ts->plat_data->set_temperature = slsi_ts_set_temperature;
+	ts->plat_data->enable = slsi_ts_enable;
+	ts->plat_data->disable = slsi_ts_disable;
 
 	ptsp = &client->dev;
 
