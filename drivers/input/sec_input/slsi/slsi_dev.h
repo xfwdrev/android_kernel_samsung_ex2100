@@ -491,4 +491,13 @@ extern int slsi_ts_firmware_update_on_hidden_menu(struct slsi_ts_data *ts, int u
 
 int slsi_ts_set_scan_mode(struct slsi_ts_data *ts, int mode);
 
+#define SEC_TS_DEBUG_SEND_UEVENT (1 << 0)
+#define INPUT_FEATURE_ENABLE_SYNC_RR120 (1 << 2)
+
+int sec_tclm_data_read(struct device *dev, int address);
+int sec_tclm_data_write(struct device *dev, int address);
+int sec_tclm_execute_force_calibration(struct device *dev, int cal_mode);
+
+extern int lpcharge;
+
 #endif
