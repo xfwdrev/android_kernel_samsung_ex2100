@@ -1216,6 +1216,7 @@ static int send_signal(int sig, struct kernel_siginfo *info, struct task_struct 
 	/* Should SIGKILL or SIGSTOP be received by a pid namespace init? */
 	bool force = false;
 
+#if 0
 	/* [SystemF/W, si_code is 0 : from userspace, si_code is over 0 : from kernel */
 	if (!is_si_special(info)) {
 		if ((current->pid != 1) && ((sig == SIGKILL && !strncmp("main", t->group_leader->comm, 4))
@@ -1226,6 +1227,7 @@ static int send_signal(int sig, struct kernel_siginfo *info, struct task_struct 
 		}
 	}
 	/* SystemF/W]*/
+#endif
 
 	if (info == SEND_SIG_NOINFO) {
 		/* Force if sent from an ancestor pid namespace */
