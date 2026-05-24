@@ -943,13 +943,10 @@ ifdef CONFIG_THINLTO
 CC_FLAGS_LTO_CLANG := -flto=thin -funified-lto -fno-split-lto-unit
 KBUILD_LDFLAGS	+= --thinlto-cache-dir=.thinlto-cache
 
-# Merge into single partition
-LD_FLAGS_LTO_CLANG := --lto-partitions=1
-
 # LLVM tunings
 LD_FLAGS_LTO_CLANG += -mllvm -import-hot-multiplier=2
-LD_FLAGS_LTO_CLANG += -mllvm -inline-threshold=1000
-LD_FLAGS_LTO_CLANG += -mllvm -import-instr-limit=10
+LD_FLAGS_LTO_CLANG += -mllvm -inline-threshold=500
+LD_FLAGS_LTO_CLANG += -mllvm -import-instr-limit=80
 else
 CC_FLAGS_LTO_CLANG := -flto
 endif
