@@ -1109,7 +1109,7 @@ static void *r9s_mask_layer_exit_br_cmdtbl[] = {
 	&PKTINFO(r9_a2_s0_hbm_and_transition),
 	&PKTINFO(r9_a2_s0_wrdisbv),
 	&PKTINFO(r9_a2_s0_tset),
-	&DLYINFO(r9_a2_s0_wait_1_frame),
+	&DLYINFO(r9_a2_s0_wait_1_vsync),
 	&SEQINFO(r9_a2_s0_set_fps_param_seq),
 	&PKTINFO(r9_a2_s0_gamma_update_enable),
 	&KEYINFO(r9_a2_s0_level1_key_disable),
