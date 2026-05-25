@@ -128,6 +128,7 @@ KASAN_SANITIZE_stackleak.o := n
 KCOV_INSTRUMENT_stackleak.o := n
 
 $(obj)/configs.o: $(obj)/config_data.gz
+CFLAGS_REMOVE_configs.o += $(CC_FLAGS_LTO)
 
 targets += config_data config_data.gz
 $(obj)/config_data.gz: $(obj)/config_data FORCE
@@ -139,6 +140,7 @@ $(obj)/config_data: arch/arm64/configs/default_defconfig FORCE
 	$(call filechk,cat)
 
 $(obj)/kheaders.o: $(obj)/kheaders_data.tar.xz
+CFLAGS_REMOVE_kheaders.o += $(CC_FLAGS_LTO)
 
 quiet_cmd_genikh = CHK     $(obj)/kheaders_data.tar.xz
       cmd_genikh = $(CONFIG_SHELL) $(srctree)/kernel/gen_kheaders.sh $@
