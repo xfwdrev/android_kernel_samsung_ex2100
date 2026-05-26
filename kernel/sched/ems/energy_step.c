@@ -731,14 +731,28 @@ static void esgov_work(struct kthread_work *work)
 
 	raw_spin_lock_irqsave(&esg_policy->update_lock, flags);
 	freq = esg_policy->target_freq;
-	esg_policy->work_in_progress = false;
 	raw_spin_unlock_irqrestore(&esg_policy->update_lock, flags);
 
-	down_write(&esg_policy->policy->rwsem);
+	/* Upstream sugov_work() doesn't hold policy->rwsem */
 	mutex_lock(&esg_policy->work_lock);
 	__cpufreq_driver_target(esg_policy->policy, freq, CPUFREQ_RELATION_L);
 	mutex_unlock(&esg_policy->work_lock);
-	up_write(&esg_policy->policy->rwsem);
+
+	/* Bounded scale-up re-check */
+	raw_spin_lock_irqsave(&esg_policy->update_lock, flags);
+	if (esg_policy->target_freq > freq) {
+		freq = esg_policy->target_freq;
+		raw_spin_unlock_irqrestore(&esg_policy->update_lock, flags);
+
+		mutex_lock(&esg_policy->work_lock);
+		__cpufreq_driver_target(esg_policy->policy, freq,
+					CPUFREQ_RELATION_L);
+		mutex_unlock(&esg_policy->work_lock);
+
+		raw_spin_lock_irqsave(&esg_policy->update_lock, flags);
+	}
+	esg_policy->work_in_progress = false;
+	raw_spin_unlock_irqrestore(&esg_policy->update_lock, flags);
 }
 
 static void esgov_irq_work(struct irq_work *irq_work)
@@ -1243,10 +1257,6 @@ esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 
 	rapid_scale = esgov_check_rapid_scale(esg_cpu);
 
-	/* check rate delay */
-	if (!rapid_scale && !esgov_check_rate_delay(esg_policy, time))
-		goto out;
-
 	/* update cpu_util of this cluster */
 	esgov_update_cpu_util(esg_policy, time, max);
 
@@ -1255,19 +1265,27 @@ esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 
 	/* get target freq for new target util */
 	target_freq = get_next_freq(esg_policy, target_util, max);
-	if (esg_policy->policy->cur == target_freq)
+	if (esg_policy->target_freq == target_freq)
 		goto out;
 
-	if (esgov_postpone_freq_update(esg_policy, esg_cpu->cpu,
-				time, target_freq, rapid_scale))
-		goto out;
+	/* Scale-down rate limits and postpone checks */
+	if (target_freq < esg_policy->target_freq) {
+		if (!rapid_scale && !esgov_check_rate_delay(esg_policy, time))
+			goto out;
+
+		if (esgov_postpone_freq_update(esg_policy, esg_cpu->cpu,
+					time, target_freq, rapid_scale))
+			goto out;
+	}
+
+	/* Always update target_freq even if work is in progress */
+	esg_policy->target_freq = target_freq;
+	esg_policy->last_freq_update_time = time;
 
 	if (!esg_policy->work_in_progress) {
 		esg_policy->last_caller = smp_processor_id();
 		esg_policy->work_in_progress = true;
 		esg_policy->util = target_util;
-		esg_policy->target_freq = target_freq;
-		esg_policy->last_freq_update_time = time;
 		trace_esg_req_freq(esg_policy->policy->cpu,
 			esg_policy->util, esg_policy->target_freq, rapid_scale);
 		irq_work_queue(&esg_policy->irq_work);
