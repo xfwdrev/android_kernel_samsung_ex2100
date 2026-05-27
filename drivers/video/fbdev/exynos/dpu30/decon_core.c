@@ -106,6 +106,21 @@ void get_ems_frame_cnt(u64 *cnt, ktime_t *time)
 struct decon_device *decon_drvdata[MAX_DECON_CNT];
 EXPORT_SYMBOL(decon_drvdata);
 
+bool display_in_doze(void)
+{
+	if (decon_drvdata[0]) {
+		enum decon_state state = decon_drvdata[0]->state;
+		return (state == DECON_STATE_DOZE ||
+#if defined(CONFIG_EXYNOS_DOZE_HIBERNATION)
+			state == DECON_STATE_DOZE_WAKE ||
+#endif
+			state == DECON_STATE_DOZE_SUSPEND);
+	}
+	return false;
+}
+EXPORT_SYMBOL(display_in_doze);
+
+
 /*
  * This spin lock protects to read and write prev_used_dpp and prev_req_win
  * variables when multi display is in operation.

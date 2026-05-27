@@ -859,6 +859,8 @@ static int __panel_seq_exit_alpm(struct panel_device *panel)
 		&panel->work[PANEL_WORK_EVASION_DISP_DET].dwork, msecs_to_jiffies(100));
 #endif
 
+	panel_notifier_call_chain(PANEL_EVENT_STATE_CHANGED, (void *)PANEL_STATE_NORMAL);
+
 	return ret;
 }
 #ifdef CONFIG_SEC_FACTORY
@@ -909,6 +911,9 @@ static int __panel_seq_set_alpm(struct panel_device *panel)
 	struct panel_bl_device *panel_bl = &panel->panel_bl;
 
 	panel_info("%s was called\n", __func__);
+
+	panel_notifier_call_chain(PANEL_EVENT_STATE_CHANGED, (void *)PANEL_STATE_ALPM);
+
 	__delay_normal_alpm(panel);
 
 	mutex_lock(&panel_bl->lock);

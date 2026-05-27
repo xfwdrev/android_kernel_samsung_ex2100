@@ -542,6 +542,19 @@ int sec_input_disable_device(struct device *dev)
 }
 EXPORT_SYMBOL(sec_input_disable_device);
 
+bool sec_input_is_enabled(struct device *dev)
+{
+	struct sec_ts_plat_data *pdata;
+	if (!dev)
+		return false;
+	pdata = dev->platform_data;
+	if (!pdata)
+		return false;
+	return atomic_read(&pdata->enabled) != 0;
+}
+EXPORT_SYMBOL(sec_input_is_enabled);
+
+
 void sec_input_utc_marker(struct device *dev, const char *annotation)
 {
 	struct timespec64 ts;
@@ -656,6 +669,49 @@ void sec_external_api_init(void)
 	pr_info("%s %s done\n", SECLOG, __func__);
 }
 
+#if IS_ENABLED(CONFIG_PANEL_NOTIFY)
+#include <linux/panel_notify.h>
+
+#define EVENT_PANEL_STATE_NORMAL 2
+#define EVENT_PANEL_STATE_ALPM   3
+
+extern struct device *ptsp;
+extern bool sec_input_is_enabled(struct device *dev);
+
+bool touch_disable_on_doze = true;
+EXPORT_SYMBOL(touch_disable_on_doze);
+
+static int touch_panel_notifier_call(struct notifier_block *nb, unsigned long event, void *data)
+{
+	struct device *dev = ptsp;
+	if (!dev)
+		return NOTIFY_DONE;
+
+	if (!touch_disable_on_doze)
+		return NOTIFY_DONE;
+
+	if (event == PANEL_EVENT_STATE_CHANGED) {
+		unsigned long state = (unsigned long)data;
+		if (state == EVENT_PANEL_STATE_ALPM) {
+			pr_info("%s: display entering ALPM/DOZE, disabling touchscreen\n", __func__);
+			if (sec_input_is_enabled(dev)) {
+				sec_input_disable_device(dev);
+			}
+		} else if (state == EVENT_PANEL_STATE_NORMAL) {
+			pr_info("%s: display exiting ALPM/DOZE, enabling touchscreen\n", __func__);
+			if (!sec_input_is_enabled(dev)) {
+				sec_input_enable_device(dev);
+			}
+		}
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block touch_panel_nb = {
+	.notifier_call = touch_panel_notifier_call,
+};
+#endif
+
 static int __init sec_input_init(void)
 {
 	int ret = 0;
@@ -680,6 +736,12 @@ static int __init sec_input_init(void)
 	ret = sec_tsp_dumpkey_init();
 	pr_info("%s %s: sec_tsp_dumpkey_init %d\n", SECLOG, __func__, ret);
 #endif
+#if IS_ENABLED(CONFIG_PANEL_NOTIFY)
+	ret = panel_notifier_register(&touch_panel_nb);
+	if (ret < 0) {
+		pr_err("%s %s: failed to register panel notifier\n", SECLOG, __func__);
+	}
+#endif
 	pr_info("%s %s --\n", SECLOG, __func__);
 	return ret;
 }
@@ -692,6 +754,9 @@ static void __exit sec_input_exit(void)
 #endif
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUMP_MODE)
 	sec_tsp_dumpkey_exit();
+#endif
+#if IS_ENABLED(CONFIG_PANEL_NOTIFY)
+	panel_notifier_unregister(&touch_panel_nb);
 #endif
 	pr_info("%s %s --\n", SECLOG, __func__);
 }

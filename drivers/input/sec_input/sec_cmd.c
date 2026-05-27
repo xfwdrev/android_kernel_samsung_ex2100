@@ -814,6 +814,32 @@ static DEVICE_ATTR_RO(cmd_result);
 static DEVICE_ATTR_RO(cmd_result_all);
 static DEVICE_ATTR_RO(cmd_list);
 
+static ssize_t disable_on_doze_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	extern bool touch_disable_on_doze;
+	return sprintf(buf, "%d\n", touch_disable_on_doze);
+}
+
+static ssize_t disable_on_doze_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	extern bool touch_disable_on_doze;
+	unsigned int val;
+	int ret;
+
+	ret = kstrtouint(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	touch_disable_on_doze = (val != 0);
+	input_info(true, dev, "%s: touch_disable_on_doze set to %d\n", __func__, touch_disable_on_doze);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(disable_on_doze);
+
 static struct attribute *sec_fac_attrs[] = {
 	&dev_attr_cmd.attr,
 	&dev_attr_cmd_status.attr,
@@ -822,6 +848,7 @@ static struct attribute *sec_fac_attrs[] = {
 	&dev_attr_cmd_result_all.attr,
 	&dev_attr_cmd_list.attr,
 	&dev_attr_htpr_force.attr,
+	&dev_attr_disable_on_doze.attr,
 	NULL,
 };
 
@@ -977,6 +1004,18 @@ static ssize_t enabled_store(struct device *dev, struct device_attribute *attr,
 		input_err(true, sec->dev,
 				"%s: failed read params [%d]\n", __func__, ret);
 		return -EINVAL;
+	}
+
+	{
+		extern bool display_in_doze(void);
+		extern bool touch_disable_on_doze;
+		if (touch_disable_on_doze && display_in_doze()) {
+			if ((buff[0] == DISPLAY_STATE_ON && buff[1] == DISPLAY_EVENT_LATE) ||
+			    (buff[0] == DISPLAY_STATE_FORCE_ON)) {
+				input_info(true, sec->dev, "%s: display is in DOZE, ignore enable write\n", __func__);
+				goto out;
+			}
+		}
 	}
 
 	if (buff[0] == DISPLAY_STATE_ON && buff[1] == DISPLAY_EVENT_LATE) {
