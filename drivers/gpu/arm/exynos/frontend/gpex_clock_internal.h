@@ -56,6 +56,7 @@ struct _clock_info {
 };
 
 int gpex_clock_sysfs_init(struct _clock_info *_clk_info);
+void gpex_reset_user_max_lock(void);
 
 int gpex_clock_update_time_in_state(int clock);
 int gpex_clock_init_time_in_state(void);

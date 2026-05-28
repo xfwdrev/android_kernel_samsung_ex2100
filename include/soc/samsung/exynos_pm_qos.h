@@ -123,6 +123,7 @@ enum exynos_pm_qos_flags_status {
 } while(0)
 
 struct exynos_pm_qos_request {
+	bool is_throttler;
 	struct plist_node node;
 	int exynos_pm_qos_class;
 	struct delayed_work work; /* for exynos_pm_qos_update_request_timeout */

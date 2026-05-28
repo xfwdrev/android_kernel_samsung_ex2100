@@ -157,6 +157,8 @@ extern int do_execveat(int, struct filename *,
 		       int);
 int do_execve_file(struct file *file, void *__argv, void *__envp);
 bool freq_control_blocking_enabled(void);
+int freq_control_register_enable_hook(void (*hook)(void));
+void freq_control_unregister_enable_hook(void (*hook)(void));
 bool init_protection_enabled(void);
 
 static inline bool task_has_exec_prefix(struct task_struct *tsk, const char *prefix)

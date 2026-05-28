@@ -19,6 +19,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/binfmts.h>
 
 #include <gpex_clock.h>
 #include <gpex_qos.h>
@@ -389,6 +390,8 @@ int gpex_clock_init(struct device **dev)
 
 void gpex_clock_term(void)
 {
+	freq_control_unregister_enable_hook(gpex_reset_user_max_lock);
+
 	/* TODO: reset other clk_info variables too */
 	clk_info.kbdev = NULL;
 }

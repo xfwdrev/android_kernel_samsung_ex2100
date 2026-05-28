@@ -410,6 +410,8 @@ static struct exynos_ufc {
 	int			last_min_wo_boost_input;
 	int			last_max_input;
 	int			last_max_strict_input;
+	bool			max_limit_user_owned;
+	bool			max_limit_protection_seen;
 
 	u32			**ufc_lit_table;
 	struct list_head	ufc_domain_list;
@@ -625,6 +627,7 @@ static void ufc_reset_max_limit_state(void)
 {
 	ufc.last_max_input = -1;
 	ufc.last_max_strict_input = -1;
+	ufc.max_limit_user_owned = false;
 }
 
 static void ufc_clear_max_limit_state(void)
@@ -634,6 +637,15 @@ static void ufc_clear_max_limit_state(void)
 
 	ufc_reset_max_limit_state();
 	ufc_update_max_limit();
+}
+
+void exynos_ufc_clear_max_limit(void)
+{
+	if (!freq_control_blocking_enabled())
+		return;
+
+	ufc.max_limit_protection_seen = true;
+	ufc_clear_max_limit_state();
 }
 
 static const char *ufc_task_control_reason(struct task_struct *tsk)
@@ -977,6 +989,27 @@ static int ufc_determine_max_limit(void)
 	return max_limit;
 }
 
+static bool ufc_protection_took_ownership(void)
+{
+	if (!freq_control_blocking_enabled()) {
+		ufc.max_limit_protection_seen = false;
+		ufc.max_limit_user_owned = false;
+		return false;
+	}
+
+	if (!ufc.max_limit_protection_seen) {
+		ufc.max_limit_protection_seen = true;
+		ufc_reset_max_limit_state();
+		return true;
+	}
+
+	if (ufc.max_limit_user_owned)
+		return false;
+
+	ufc_reset_max_limit_state();
+	return true;
+}
+
 static void ufc_update_max_limit(void)
 {
 	struct ufc_domain *ufc_dom;
@@ -991,6 +1024,8 @@ static void ufc_update_max_limit(void)
 
 	if (ufc_group_controls_frequencies(current)) {
 		ufc_reset_max_limit_state();
+		target_freq = ufc.max_vfreq;
+	} else if (ufc_protection_took_ownership()) {
 		target_freq = ufc.max_vfreq;
 	} else {
 		target_freq = ufc_determine_max_limit();
@@ -1103,6 +1138,12 @@ static ssize_t cpufreq_max_limit_store(struct device *dev,
 	}
 
 	ufc.last_max_input = input;
+	if (freq_control_blocking_enabled()) {
+		ufc.max_limit_protection_seen = true;
+		ufc.max_limit_user_owned = input > 0;
+	} else {
+		ufc.max_limit_user_owned = false;
+	}
 
 	ufc_update_max_limit();
 
@@ -1172,6 +1213,12 @@ static ssize_t cpufreq_max_limit_strict_store(struct device *dev,
 
 	/* Save the input for sse change */
 	ufc.last_max_strict_input = input;
+	if (freq_control_blocking_enabled()) {
+		ufc.max_limit_protection_seen = true;
+		ufc.max_limit_user_owned = input > 0;
+	} else {
+		ufc.max_limit_user_owned = false;
+	}
 	ufc_update_max_limit();
 
 	return count;

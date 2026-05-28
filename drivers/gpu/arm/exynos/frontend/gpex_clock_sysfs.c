@@ -501,6 +501,15 @@ GPEX_STATIC ssize_t show_gpu_freq_table(char *buf)
 }
 CREATE_SYSFS_KOBJECT_READ_FUNCTION(show_gpu_freq_table)
 
+void gpex_reset_user_max_lock(void)
+{
+	if (clk_info) {
+		clk_info->user_max_lock_input = 0;
+		gpex_clock_lock_clock(GPU_CLOCK_MAX_UNLOCK, SYSFS_LOCK, 0);
+		gpex_clock_lock_clock(GPU_CLOCK_MAX_UNLOCK, PMQOS_LOCK, 0);
+	}
+}
+
 GPEX_STATIC ssize_t set_gpu_unlock(const char *buf, size_t count)
 {
 	int ret;
@@ -519,6 +528,7 @@ GPEX_STATIC ssize_t set_gpu_unlock(const char *buf, size_t count)
 		return ret;
 
 	gpu_unlock = enable;
+	gpex_reset_user_max_lock();
 
 	return count;
 }
@@ -534,6 +544,7 @@ int gpex_clock_sysfs_init(struct _clock_info *_clk_info)
 {
 	clk_info = _clk_info;
 	gpu_unlock = clk_info->gpu_max_clock == clk_info->gpu_unlock_max_clock;
+	freq_control_register_enable_hook(gpex_reset_user_max_lock);
 
 	GPEX_UTILS_SYSFS_DEVICE_FILE_ADD(clock, show_clock, set_clock);
 	GPEX_UTILS_SYSFS_DEVICE_FILE_ADD_RO(asv_table, show_asv_table);

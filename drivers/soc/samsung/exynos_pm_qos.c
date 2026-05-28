@@ -53,6 +53,7 @@
 
 void exynos_plist_del(struct plist_node *node, struct plist_head *head);
 void exynos_plist_add(struct plist_node *node, struct plist_head *head);
+static void exynos_pm_qos_refresh_throttler_limits(void);
 
 /*
  * locking rule: all changes to constraints or notifiers lists
@@ -663,6 +664,7 @@ static bool exynos_pm_qos_is_freq_max_class(int exynos_pm_qos_class)
 		return false;
 	}
 }
+
 static ssize_t exynos_pm_qos_power_write(struct file *filp, const char __user *buf,
 		size_t count, loff_t *f_pos);
 static ssize_t exynos_pm_qos_power_read(struct file *filp, char __user *buf,
@@ -689,9 +691,35 @@ static inline int exynos_pm_qos_get_value(struct exynos_pm_qos_constraints *c)
 
 	switch (c->type) {
 	case EXYNOS_PM_QOS_MIN:
+		if (freq_control_blocking_enabled()) {
+			struct exynos_pm_qos_request *req;
+			int min = c->default_value;
+			plist_for_each(node, &c->list) {
+				req = container_of(node,
+						   struct exynos_pm_qos_request,
+						   node);
+				if (!req->is_throttler) {
+					min = node->prio;
+					break;
+				}
+			}
+			return min;
+		}
 		return plist_first(&c->list)->prio;
 
 	case EXYNOS_PM_QOS_MAX:
+		if (freq_control_blocking_enabled()) {
+			struct exynos_pm_qos_request *req;
+			int max = c->default_value;
+			plist_for_each(node, &c->list) {
+				req = container_of(node,
+						   struct exynos_pm_qos_request,
+						   node);
+				if (!req->is_throttler)
+					max = node->prio;
+			}
+			return max;
+		}
 		return plist_last(&c->list)->prio;
 
 	case EXYNOS_PM_QOS_SUM:
@@ -1018,6 +1046,8 @@ void exynos_pm_qos_add_request_trace(char *func, unsigned int line,
 	req->exynos_pm_qos_class = exynos_pm_qos_class;
 	req->func = func;
 	req->line = line;
+	req->is_throttler =
+		task_controls_frequencies_with_throttlers_protection(current, false);
 	INIT_DELAYED_WORK(&req->work, exynos_pm_qos_work_fn);
 //	trace_pm_qos_add_request(exynos_pm_qos_class, value);
 	exynos_pm_qos_update_target(exynos_pm_qos_array[exynos_pm_qos_class]->constraints,
@@ -1046,6 +1076,9 @@ void exynos_pm_qos_update_request(struct exynos_pm_qos_request *req,
 		return;
 	}
 
+	req->is_throttler =
+		task_controls_frequencies_with_throttlers_protection(current, false);
+
 	cancel_delayed_work_sync(&req->work);
 	__exynos_pm_qos_update_request(req, new_value);
 }
@@ -1067,6 +1100,9 @@ void exynos_pm_qos_update_request_timeout(struct exynos_pm_qos_request *req, s32
 	if (WARN(!exynos_pm_qos_request_active(req),
 		 "%s called for unknown object.", __func__))
 		return;
+
+	req->is_throttler =
+		task_controls_frequencies_with_throttlers_protection(current, false);
 
 	cancel_delayed_work_sync(&req->work);
 
@@ -1314,6 +1350,8 @@ static int exynos_pm_qos_power_init(void)
 		}
 	}
 
+	freq_control_register_enable_hook(exynos_pm_qos_refresh_throttler_limits);
+
 	return ret;
 }
 late_initcall(exynos_pm_qos_power_init);
@@ -1384,6 +1422,39 @@ void exynos_plist_del(struct plist_node *node, struct plist_head *head)
 	list_del_init(&node->node_list);
 
 	plist_check_head(head);
+}
+
+static void exynos_pm_qos_refresh_throttler_limits(void)
+{
+	int i;
+	struct exynos_pm_qos_request fake_req = {
+		.func = "refresh_throttler_limits",
+		.line = 0,
+	};
+
+	for (i = 0; i < EXYNOS_PM_QOS_NUM_CLASSES; i++) {
+		if (exynos_pm_qos_array[i] && exynos_pm_qos_array[i]->constraints) {
+			struct exynos_pm_qos_constraints *c;
+			int prev_value, curr_value;
+			unsigned long flags;
+
+			c = exynos_pm_qos_array[i]->constraints;
+			mutex_lock(&c->mlock);
+			spin_lock_irqsave(&c->lock, flags);
+			prev_value = c->target_value;
+			curr_value = exynos_pm_qos_get_value(c);
+			exynos_pm_qos_set_value(c, curr_value);
+			spin_unlock_irqrestore(&c->lock, flags);
+
+			if (prev_value != curr_value && c->notifiers) {
+				fake_req.exynos_pm_qos_class = i;
+				blocking_notifier_call_chain(c->notifiers,
+							     (unsigned long)curr_value,
+							     (void *)&fake_req.exynos_pm_qos_class);
+			}
+			mutex_unlock(&c->mlock);
+		}
+	}
 }
 
 MODULE_LICENSE("GPL");

@@ -19,6 +19,7 @@
 #include <linux/capability.h>
 #include <linux/compiler.h>
 #include <linux/binfmts.h>
+#include <linux/mutex.h>
 
 #include <linux/rcupdate.h>	/* rcu_expedited and rcu_normal */
 
@@ -186,6 +187,8 @@ KERNEL_ATTR_RW(rcu_normal);
 
 static bool freq_control_blocking = false;
 static bool init_protection = true;
+static DEFINE_MUTEX(freq_control_hooks_lock);
+static void (*freq_control_enable_hooks[4])(void);
 
 bool init_protection_enabled(void)
 {
@@ -202,12 +205,81 @@ bool freq_control_blocking_enabled(void)
 }
 EXPORT_SYMBOL_GPL(freq_control_blocking_enabled);
 
+int freq_control_register_enable_hook(void (*hook)(void))
+{
+	int i, ret = -ENOSPC;
+	bool enabled;
+
+	if (!hook)
+		return -EINVAL;
+
+	mutex_lock(&freq_control_hooks_lock);
+	for (i = 0; i < ARRAY_SIZE(freq_control_enable_hooks); i++) {
+		if (freq_control_enable_hooks[i] == hook) {
+			ret = 0;
+			goto out;
+		}
+	}
+	for (i = 0; i < ARRAY_SIZE(freq_control_enable_hooks); i++) {
+		if (!freq_control_enable_hooks[i]) {
+			freq_control_enable_hooks[i] = hook;
+			ret = 0;
+			break;
+		}
+	}
+out:
+	enabled = freq_control_blocking_enabled();
+	mutex_unlock(&freq_control_hooks_lock);
+
+	if (!ret && enabled)
+		hook();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(freq_control_register_enable_hook);
+
+void freq_control_unregister_enable_hook(void (*hook)(void))
+{
+	int i;
+
+	if (!hook)
+		return;
+
+	mutex_lock(&freq_control_hooks_lock);
+	for (i = 0; i < ARRAY_SIZE(freq_control_enable_hooks); i++) {
+		if (freq_control_enable_hooks[i] == hook)
+			freq_control_enable_hooks[i] = NULL;
+	}
+	mutex_unlock(&freq_control_hooks_lock);
+}
+EXPORT_SYMBOL_GPL(freq_control_unregister_enable_hook);
+
+static void freq_control_run_enable_hooks(void)
+{
+	void (*hooks[ARRAY_SIZE(freq_control_enable_hooks)])(void);
+	int i;
+
+	mutex_lock(&freq_control_hooks_lock);
+	for (i = 0; i < ARRAY_SIZE(freq_control_enable_hooks); i++) {
+		hooks[i] = freq_control_enable_hooks[i];
+	}
+	mutex_unlock(&freq_control_hooks_lock);
+
+	for (i = 0; i < ARRAY_SIZE(hooks); i++) {
+		if (hooks[i])
+			hooks[i]();
+	}
+}
+
 static ssize_t throttlers_protection_show(struct kobject *kobj,
 					  struct kobj_attribute *attr,
 					  char *buf)
 {
 	return sprintf(buf, "%d\n", freq_control_blocking_enabled());
 }
+
+void __weak cpufreq_reset_max_frequencies(void) {}
+void __weak exynos_ufc_clear_max_limit(void) {}
 
 static ssize_t throttlers_protection_store(struct kobject *kobj,
 					   struct kobj_attribute *attr,
@@ -225,6 +297,11 @@ static ssize_t throttlers_protection_store(struct kobject *kobj,
 		return -EINVAL;
 
 	WRITE_ONCE(freq_control_blocking, enable);
+	if (enable) {
+		exynos_ufc_clear_max_limit();
+		cpufreq_reset_max_frequencies();
+		freq_control_run_enable_hooks();
+	}
 	pr_info("throttlers protection %s\n", enable ? "enabled" : "disabled");
 
 	return count;

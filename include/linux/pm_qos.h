@@ -113,6 +113,7 @@ struct freq_qos_request {
 	enum freq_qos_req_type type;
 	struct plist_node pnode;
 	struct freq_constraints *qos;
+	bool is_throttler;
 };
 
 
@@ -321,6 +322,7 @@ int freq_qos_update_request(struct freq_qos_request *req, s32 new_value);
 int freq_qos_remove_request(struct freq_qos_request *req);
 int freq_qos_apply(struct freq_qos_request *req,
 		   enum pm_qos_req_action action, s32 value);
+int freq_qos_reset_max_limits(struct freq_constraints *qos, s32 value);
 
 int freq_qos_add_notifier(struct freq_constraints *qos,
 			  enum freq_qos_req_type type,
