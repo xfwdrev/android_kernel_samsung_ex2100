@@ -23,17 +23,36 @@
 #if IS_ENABLED(CONFIG_CPU_FREQ)
 #include <linux/cpufreq.h>
 #endif
-#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS)
+#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
 #include <soc/samsung/exynos_pm_qos.h>
 #endif
-#if IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
 #include <soc/samsung/freq-qos-tracer.h>
 #endif
+
+#include "ufs-exynos-perf-v1.h"
+#include "ufs-exynos-gear.h"
+
+enum {
+	__TOKEN_FAIL,
+	__TOKEN_NUM,
+};
+
+enum __traffic {
+	TRAFFIC_NONE = 0,
+	TRAFFIC_HIGH,
+	TRAFFIC_LOW,
+};
+
+static const char *__res_token[__TOKEN_NUM] = {
+	"fail to",
+};
 
 enum ufs_perf_op {
 	UFS_PERF_OP_NONE = 0,
 	UFS_PERF_OP_R,
 	UFS_PERF_OP_W,
+	UFS_PERF_OP_S,
 	UFS_PERF_OP_MAX,
 };
 
@@ -43,76 +62,111 @@ enum ufs_perf_ctrl {
 	UFS_PERF_CTRL_RELEASE,
 };
 
-struct ufs_perf_control {
-	/* from device tree */
-	u32 th_chunk_in_kb;	/* big vs little */
-	u32 th_count_b;		/* count for big chunk */
-	u32 th_count_l;		/* count for little chunk */
-	u32 th_period_in_ms_b;	/* period for big chunk */
-	u32 th_period_in_ms_l;	/* period for little chunk */
-	u32 th_reset_in_ms;	/* timeout for reset */
+enum ufs_perf_entry {
+	UFS_PERF_ENTRY_QUEUED = 0,
+	UFS_PERF_ENTRY_RESET,
+};
 
-	u32 th_count_b_r_cont;
+/* private */
+enum policy_res {
+	R_OK = 0,
+	R_CTRL,
+};
 
-	/* queue-depth based lock: trigger perf lock when this many
-	 * requests are simultaneously in flight, regardless of size */
-	u32 th_queue_depth;
+enum {
+	__UPDATE_V1 = 0,
+	__UPDATE_GEAR,
+	__UPDATE_MAX,
+};
+#define UPDATE_V1	BIT(__UPDATE_V1)
+#define UPDATE_GEAR	BIT(__UPDATE_GEAR)
 
-#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS)
+enum {
+	__CTRL_REQ_DVFS = 0,
+	__CTRL_REQ_WB,
+	__CTRL_REQ_GEAR,
+	__CTRL_REQ_MAX,
+};
+#define CTRL_REQ_DVFS	BIT(__CTRL_REQ_DVFS)
+#define CTRL_REQ_WB	BIT(__CTRL_REQ_WB)
+
+enum ctrl_op {
+	CTRL_OP_NONE = 0,
+	CTRL_OP_UP,
+	CTRL_OP_DOWN,
+};
+
+struct ufs_perf {
+	int id;
+
+	/* stats chosen by externals */
+	u32 stat_bits;
+
+	/* interface from request to control */
+	u32 ctrl_handle[__CTRL_REQ_MAX];
+	spinlock_t lock_handle;
+
+	/* handler */
+	struct task_struct *handler;
+	struct completion completion;	/* wake-up source */
+	enum ctrl_op ctrl_state[__CTRL_REQ_MAX];
+
+	/* sysfs */
+	struct kobject sysfs_kobj;
+
+	struct ufs_perf_stat_v1 stat_v1;
+	struct ufs_perf_stat_v2 stat_v2;
+
+	enum policy_res (*update[__UPDATE_MAX])(struct ufs_perf *perf, u32 qd,
+						enum ufs_perf_op op,
+						enum ufs_perf_entry);
+	int (*ctrl[__CTRL_REQ_MAX])(struct ufs_perf *perf, enum ctrl_op op);
+
+	/* knobs */
+#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
 	struct exynos_pm_qos_request	pm_qos_int;
-	s32			pm_qos_int_value;
+	s32			val_pm_qos_int;
 	struct exynos_pm_qos_request	pm_qos_mif;
-	s32			pm_qos_mif_value;
+	s32			val_pm_qos_mif;
 #endif
-
 #if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
 	struct notifier_block cpufreq_nb;
-	struct freq_qos_request qos_req_cpu_cl0;
-	s32			pm_qos_cluster0_value;
-	struct freq_qos_request qos_req_cpu_cl1;
-	s32			pm_qos_cluster1_value;
-	struct freq_qos_request qos_req_cpu_cl2;
-	s32			pm_qos_cluster2_value;
-
-#define CL0			0 /* LIT CPU */
-#define CL1			4 /* MID CPU */
-#define CL2			7 /* BIG CPU */
+	bool			cpufreq_nb_registered;
+	struct freq_qos_request pm_qos_cluster0;
+	s32			val_pm_qos_cluster0;
+	struct freq_qos_request pm_qos_cluster1;
+	s32			val_pm_qos_cluster1;
+	struct freq_qos_request pm_qos_cluster2;
+	s32			val_pm_qos_cluster2;
+#define MAX_CLUSTERS		3
+	int num_clusters;
+	unsigned int clusters[MAX_CLUSTERS];
 #endif
 
-	/* spin lock */
-	spinlock_t lock;
-
-	/* Control factors */
-	bool is_locked;
-	bool is_held;
-	bool will_stop;
-
-	/* Control factors, need to care for concurrency */
-	u32 count_b;		/* big chunk */
-	u32 count_l;		/* little chunk */
-	u32 count_b_r_cont;	/* little chunk */
-	s64 cp_time_b;		/* last check point time */
-	s64 cp_time_l;		/* last check point time */
-	s64 cur_time;		/* current point time */
-
-	u32 ctrl_flag;
-	u32 ctrl_flag_in_transit;
-
-	struct task_struct *handler;	/* thread for PM QoS */
-	bool is_active;			/* handler status */
-	struct completion completion;	/* wake-up source */
-	struct timer_list reset_timer;	/* stat reset timer */
-
-	/* handles */
+	/* handle only for wb */
 	struct ufs_hba *hba;
+
+	u8 exynos_gear_scale;
 };
 
 /* EXTERNAL FUNCTIONS */
-void ufs_perf_reset(void *data, struct ufs_hba *hba, bool boot);
-void ufs_perf_update_stat(void *data, unsigned int len, enum ufs_perf_op op);
-void ufs_perf_update_queue_depth(void *data, struct ufs_hba *hba);
-void ufs_perf_populate_dt(void *data, struct device_node *np);
-bool ufs_perf_init(void **data, struct device *dev);
+void ufs_perf_reset(void *data);
+void ufs_perf_update(void *data, u32 qd, struct scsi_cmnd *cmd, enum ufs_perf_op op);
+bool ufs_perf_init(void **data, struct ufs_hba *hba);
 void ufs_perf_exit(void *data);
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+void ufs_init_cpufreq_request(struct ufs_perf *perf, bool add_noob);
+#endif
+
+/* from stats */
+int ufs_perf_init_v1(struct ufs_perf *perf);
+void ufs_perf_exit_v1(struct ufs_perf *perf);
+
+void ufs_gear_scale_init(struct ufs_perf *perf);
+void ufs_gear_scale_exit(struct ufs_perf *perf);
+int ufs_gear_change(struct ufs_hba *hba, bool en);
+
+/* to stats */
+void ufs_perf_complete(struct ufs_perf *perf);
 
 #endif /* _UFS_PERF_H_ */

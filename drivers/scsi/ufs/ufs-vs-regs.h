@@ -134,8 +134,14 @@
 #define UNIP_PA_AVAILRXDATALENS			0x3100	/* PA_AvailRxDataLanes */
 #define UNIP_PA_ACTIVETXDATALENS		0x3180	/* PA_ActiveTxDataLanes */
 #define UNIP_PA_CONNECTEDTXDATALENS		0x3184	/* PA_ConnectedTxDataLanes */
+#define UNIP_PA_TXGEAR				0x31A0	/* PA_TxGear */
+#define UNIP_PA_TXTERMINATION			0x31A4	/* PA_TxTermination */
+#define UNIP_PA_HSSERIES			0x31A8	/* PA_HSSeries */
+#define UNIP_PA_PWRMODE				0x31C4	/* PA_PWRMode */
 #define UNIP_PA_ACTIVERXDATALENS		0x3200	/* PA_ActiveRxDataLanes */
 #define UNIP_PA_CONNECTEDRXDATALENS		0x3204	/* PA_ConnectedRxDataLanes */
+#define UNIP_PA_RXGEAR				0x320C	/* PA_RxGear */
+#define UNIP_PA_RXTERMINATION			0x3210	/* PA_RxTermination */
 #define UNIP_PA_MAXRXHSGEAR			0x321C	/* PA_MaxRxHSGear */
 
 #define UNIP_PA_DBG_OPTION_SUITE_1   0x39A8

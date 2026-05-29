@@ -455,7 +455,8 @@ static int exynos_ufs_config_externals(struct exynos_ufs *ufs)
 	}
 
 	/* performance */
-	ufs_perf_reset(ufs->perf, ufs->hba, true);
+	if (ufs->perf)
+		ufs_perf_reset(ufs->perf);
 out:
 	return ret;
 }
@@ -1212,7 +1213,7 @@ static ssize_t ufs_perf_queue_depth_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct exynos_ufs *ufs = to_exynos_ufs(dev_get_drvdata(dev));
-	struct ufs_perf_control *perf = (struct ufs_perf_control *)ufs->perf;
+	struct ufs_perf *perf = (struct ufs_perf *)ufs->perf;
 	unsigned int current_depth = 0;
 
 	if (perf && !IS_ERR(perf->handler))
@@ -1220,7 +1221,7 @@ static ssize_t ufs_perf_queue_depth_show(struct device *dev,
 
 	return sprintf(buf, "current:%u threshold:%u\n",
 			current_depth,
-			(perf && !IS_ERR(perf->handler)) ? perf->th_queue_depth : 0);
+			(perf && !IS_ERR(perf->handler)) ? perf->stat_v1.th_qd_max : 0);
 }
 static DEVICE_ATTR(perf_queue_depth, 0444, ufs_perf_queue_depth_show, NULL);
 
@@ -1518,6 +1519,10 @@ static int exynos_ufs_init(struct ufs_hba *hba)
 	exynos_ufs_fmp_config(hba, 1);
 	exynos_ufs_srpmb_set_wlun_uac(true);
 
+	/* init io perf stat, need an identifier later */
+	if (!ufs_perf_init(&ufs->perf, ufs->hba))
+		dev_err(ufs->dev, "Not enable UFS performance mode\n");
+
 	return 0;
 }
 
@@ -1573,7 +1578,8 @@ static int exynos_ufs_setup_clocks(struct ufs_hba *hba, bool on,
 
 			hsi_tcxo_far_control(0, 0);
 			/* reset perf context to start again */
-			ufs_perf_reset(ufs->perf, NULL, false);
+			if (ufs->perf)
+				ufs_perf_reset(ufs->perf);
 			/* PM Qos Release for stability */
 #if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
 			exynos_pm_qos_update_request(&ufs->pm_qos_int, 0);
@@ -1784,6 +1790,7 @@ static void exynos_ufs_set_nexus_t_xfer_req(struct ufs_hba *hba,
 	enum ufs_perf_op op = UFS_PERF_OP_NONE;
 	struct ufshcd_lrb *lrbp;
 	struct scsi_cmnd *scmd;
+	u32 qd;
 	u32 type;
 	struct ufs_vs_handle *handle = &ufs->handle;
 
@@ -1813,9 +1820,12 @@ static void exynos_ufs_set_nexus_t_xfer_req(struct ufs_hba *hba,
 			op = UFS_PERF_OP_R;
 		else if (scmd->cmnd[0] == 0x2A)
 			op = UFS_PERF_OP_W;
-		ufs_perf_update_stat(ufs->perf, scmd->request->__data_len, op);
-		/* queue-depth based lock: fires independently of request size */
-		ufs_perf_update_queue_depth(ufs->perf, hba);
+		else if (scmd->cmnd[0] == 0x35)
+			op = UFS_PERF_OP_S;
+		if (ufs->perf) {
+			qd = hweight_long(hba->outstanding_reqs) + 1;
+			ufs_perf_update(ufs->perf, qd, scmd, op);
+		}
 
 		/* cmnd[7] & cmnd[8] is the length of the data, 4KB unit*/
 		if (op == UFS_PERF_OP_R || op == UFS_PERF_OP_W)
@@ -2056,7 +2066,11 @@ static void exynos_ufs_perf_mode(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 		op = UFS_PERF_OP_R;
 	else if (cmd->cmnd[0] == 0x2A)
 		op = UFS_PERF_OP_W;
-	ufs_perf_update_stat(ufs->perf, cmd->request->__data_len, op);
+	else if (cmd->cmnd[0] == 0x35)
+		op = UFS_PERF_OP_S;
+	if (ufs->perf)
+		ufs_perf_update(ufs->perf, hweight_long(hba->outstanding_reqs) + 1,
+				cmd, op);
 }
 #endif
 
@@ -2334,8 +2348,6 @@ static int exynos_ufs_populate_dt(struct device *dev, struct exynos_ufs *ufs)
 		ufs->smu = SMU_ID_MAX;
 	else
 		ufs->smu = id;
-
-	ufs_perf_populate_dt(ufs->perf, np);
 
 #if IS_ENABLED(CONFIG_SEC_UFS_WB_FEATURE)
 	if (ufs_sec_parse_wb_info(ufs, np)) {
@@ -2725,10 +2737,6 @@ static int exynos_ufs_probe(struct platform_device *pdev)
 	if (ret)
 		goto out;
 	ufs_map_vs_regions(ufs);
-
-	/* init io perf stat, need an identifier later */
-	if (!ufs_perf_init(&ufs->perf, dev))
-		dev_err(dev, "Not enable UFS performance mode\n");
 
 	/* populate device tree nodes */
 	ret = exynos_ufs_populate_dt(dev, ufs);

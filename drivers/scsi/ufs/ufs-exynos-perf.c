@@ -13,470 +13,560 @@
  */
 #include <linux/of.h>
 #include "ufs-exynos-perf.h"
+
 #define CREATE_TRACE_POINTS
+#include <linux/pm_qos.h>
 #include <trace/events/ufs_exynos_perf.h>
 
-static struct ufs_perf_control *_perf;
-
 #if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+static struct ufs_perf *_perf;
+
 static int ufs_perf_cpufreq_nb(struct notifier_block *nb,
 		unsigned long event, void *arg)
 {
 	struct cpufreq_policy *policy = (struct cpufreq_policy *)arg;
-	struct ufs_perf_control *perf = _perf;
+	struct ufs_perf *perf = _perf;
 
 	if (event != CPUFREQ_CREATE_POLICY)
 		return NOTIFY_OK;
 
 #if IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
-	if (policy->cpu == CL0)
+	if (policy->cpu == perf->clusters[0])
 		freq_qos_tracer_add_request(&policy->constraints,
-				&perf->qos_req_cpu_cl0, FREQ_QOS_MIN, 0);
-	else if (policy->cpu == CL1)
-		freq_qos_tracer_add_request(&policy->constraints,
-				&perf->qos_req_cpu_cl1, FREQ_QOS_MIN, 0);
-	else if (policy->cpu == CL2)
-		freq_qos_tracer_add_request(&policy->constraints,
-				&perf->qos_req_cpu_cl2, FREQ_QOS_MIN, 0);
-#else
-	if (policy->cpu == CL0)
-		freq_qos_add_request(&policy->constraints,
-				&perf->qos_req_cpu_cl0, FREQ_QOS_MIN, 0);
-	else if (policy->cpu == CL1)
-		freq_qos_add_request(&policy->constraints,
-				&perf->qos_req_cpu_cl1, FREQ_QOS_MIN, 0);
-	else if (policy->cpu == CL2)
-		freq_qos_add_request(&policy->constraints,
-				&perf->qos_req_cpu_cl2, FREQ_QOS_MIN, 0);
-#endif
+				&perf->pm_qos_cluster0, FREQ_QOS_MIN, 0);
 
+	else if (policy->cpu == perf->clusters[1])
+		freq_qos_tracer_add_request(&policy->constraints,
+				&perf->pm_qos_cluster1, FREQ_QOS_MIN, 0);
+	else if (policy->cpu == perf->clusters[2])
+		freq_qos_tracer_add_request(&policy->constraints,
+				&perf->pm_qos_cluster2, FREQ_QOS_MIN, 0);
+#else
+	if (policy->cpu == perf->clusters[0])
+		freq_qos_add_request(&policy->constraints,
+				&perf->pm_qos_cluster0, FREQ_QOS_MIN, 0);
+	else if (policy->cpu == perf->clusters[1])
+		freq_qos_add_request(&policy->constraints,
+				&perf->pm_qos_cluster1, FREQ_QOS_MIN, 0);
+	else if (policy->cpu == perf->clusters[2])
+		freq_qos_add_request(&policy->constraints,
+				&perf->pm_qos_cluster2, FREQ_QOS_MIN, 0);
+#endif
 	return NOTIFY_OK;
 }
 #endif
 
-static void ufs_perf_cp_and_trg(struct ufs_perf_control *perf,
-		bool is_big, bool is_cp_time, s64 time, u32 ctrl_flag)
+void ufs_perf_complete(struct ufs_perf *perf)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&perf->lock, flags);
-	perf->ctrl_flag = ctrl_flag;
-	if (is_cp_time) {
-		if (time == -1 || is_big) {
-			perf->cp_time_b = time;
-			perf->count_b = 0;
-		}
-		if (time == -1 || !is_big) {
-			perf->cp_time_l = time;
-			perf->count_l = 0;
-		}
-	} else {
-		if (is_big)
-			perf->count_b++;
-		else
-			perf->count_l++;
-	}
-
-	/*
-	 * In increasing traffic cases after idle,
-	 * make it do not update stat because we assume
-	 * this is IO centric scenarios.
-	 */
-	if (perf->is_locked && !perf->is_held &&
-				ctrl_flag == UFS_PERF_CTRL_LOCK)
-		perf->is_held = true;
-
-	if (!perf->is_active) {
-		if (!perf->is_locked &&
-				ctrl_flag == UFS_PERF_CTRL_LOCK) {
-			trace_ufs_exynos_perf_lock(49);
-			complete(&perf->completion);
-		}
-		if (perf->is_locked &&
-				ctrl_flag == UFS_PERF_CTRL_RELEASE) {
-			trace_ufs_exynos_perf_lock(99);
-			complete(&perf->completion);
-		}
-	}
-	spin_unlock_irqrestore(&perf->lock, flags);
+	complete(&perf->completion);
 }
 
 static int ufs_perf_handler(void *data)
 {
-	struct ufs_perf_control *perf = (struct ufs_perf_control *)data;
-	u32 ctrl_flag;
+	struct ufs_perf *perf = (struct ufs_perf *)data;
 	unsigned long flags;
-	bool is_locked;
-	bool is_held;
-
-	perf->is_active = true;
-	perf->is_locked = false;
-	perf->is_held = false;
-	perf->will_stop = false;
-	init_completion(&perf->completion);
+	u32 ctrl_handle[__CTRL_REQ_MAX];
+	int i;
+	int idle;
 
 	while (true) {
 		if (kthread_should_stop())
 			break;
-		if (perf->will_stop)
-			continue;
 
-		/* ctrl_flag should be reset to get incoming request */
-		spin_lock_irqsave(&perf->lock, flags);
-		ctrl_flag = perf->ctrl_flag;
-		perf->ctrl_flag = UFS_PERF_CTRL_NONE;
-		is_locked = perf->is_locked;
-		is_held = perf->is_held;	//
-		spin_unlock_irqrestore(&perf->lock, flags);
-
-		if (ctrl_flag == UFS_PERF_CTRL_LOCK) {
-			if (!is_locked) {
-#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
-				if (perf->pm_qos_int_value)
-					exynos_pm_qos_update_request(&perf->pm_qos_int, perf->pm_qos_int_value);
-				if (perf->pm_qos_mif_value)
-					exynos_pm_qos_update_request(&perf->pm_qos_mif, perf->pm_qos_mif_value);
-#endif
-#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
-				freq_qos_update_request(&perf->qos_req_cpu_cl0,
-						perf->pm_qos_cluster0_value);
-				freq_qos_update_request(&perf->qos_req_cpu_cl1,
-						perf->pm_qos_cluster1_value);
-				freq_qos_update_request(&perf->qos_req_cpu_cl2,
-						perf->pm_qos_cluster2_value);
-#endif
-				ufshcd_wb_ctrl(perf->hba, true);
-				spin_lock_irqsave(&perf->lock, flags);
-				trace_ufs_exynos_perf_lock(1);
-				spin_unlock_irqrestore(&perf->lock, flags);
-			}
-
-			spin_lock_irqsave(&perf->lock, flags);
-			perf->is_locked = true;
-			perf->is_held = true;
-			spin_unlock_irqrestore(&perf->lock, flags);
-		} else if (ctrl_flag == UFS_PERF_CTRL_RELEASE) {
-			if (is_locked) {
-				spin_lock_irqsave(&perf->lock, flags);
-				trace_ufs_exynos_perf_lock(3);
-				spin_unlock_irqrestore(&perf->lock, flags);
-				ufshcd_wb_ctrl(perf->hba, false);
-#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
-				if (perf->pm_qos_int_value)
-					exynos_pm_qos_update_request(&perf->pm_qos_int, 0);
-				if (perf->pm_qos_mif_value)
-					exynos_pm_qos_update_request(&perf->pm_qos_mif, 0);
-#endif
-#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
-				freq_qos_update_request(&perf->qos_req_cpu_cl0,
-						0);
-				freq_qos_update_request(&perf->qos_req_cpu_cl1,
-						0);
-				freq_qos_update_request(&perf->qos_req_cpu_cl2,
-						0);
-#endif
-			}
-
-			spin_lock_irqsave(&perf->lock, flags);
-			perf->is_locked = false;
-			spin_unlock_irqrestore(&perf->lock, flags);
-		} else {
-			spin_lock_irqsave(&perf->lock, flags);
-			perf->is_active = false;
-			trace_ufs_exynos_perf_lock(8);
-			spin_unlock_irqrestore(&perf->lock, flags);
-
-			wait_for_completion(&perf->completion);
-
-			trace_ufs_exynos_perf_lock(9);
-			spin_lock_irqsave(&perf->lock, flags);
-			perf->is_active = true;
-			spin_unlock_irqrestore(&perf->lock, flags);
+		/* get requests */
+		spin_lock_irqsave(&perf->lock_handle, flags);
+		for (i = 0; i < __CTRL_REQ_MAX; i++) {
+			ctrl_handle[i] = perf->ctrl_handle[i];
+			perf->ctrl_handle[i] = CTRL_OP_NONE;
 		}
+		spin_unlock_irqrestore(&perf->lock_handle, flags);
 
+		/* execute */
+		idle = 0;
+		for (i = 0; i < __CTRL_REQ_MAX; i++) {
+			if (ctrl_handle[i] == CTRL_OP_NONE) {
+				idle++;
+			} else if (perf->ctrl[i]) {
+				perf->ctrl[i](perf, ctrl_handle[i]);
+			}
+		}
+		if (idle == __CTRL_REQ_MAX) {
+			trace_ufs_perf_lock("sleep", ctrl_handle[0]);
+			wait_for_completion_timeout(&perf->completion, 10 * HZ);
+			trace_ufs_perf_lock("wake-up", ctrl_handle[0]);
+		}
 	}
-
-	__set_current_state(TASK_RUNNING);
-	spin_lock_irqsave(&perf->lock, flags);
-	perf->handler = NULL;
-	spin_unlock_irqrestore(&perf->lock, flags);
-	perf->is_active = false;
 
 	return 0;
 }
 
 /* EXTERNAL FUNCTIONS */
-
-static void ufs_perf_reset_timer(struct timer_list *t)
+void ufs_perf_update(void *data, u32 qd, struct scsi_cmnd *cmd, enum ufs_perf_op op)
 {
-	struct ufs_perf_control *perf = from_timer(perf, t, reset_timer);
-	unsigned long flags;
-	u32 ctrl_flag;
-
-	spin_lock_irqsave(&perf->lock, flags);
-	perf->is_held = false;
-	ctrl_flag = perf->ctrl_flag_in_transit;
-	perf->ctrl_flag_in_transit = UFS_PERF_CTRL_NONE;
-	spin_unlock_irqrestore(&perf->lock, flags);
-
-	ufs_perf_cp_and_trg(perf, false, true, -1, ctrl_flag);
-}
-
-/* check point to re-initiate perf stat */
-void ufs_perf_reset(void *data, struct ufs_hba *hba, bool boot)
-{
-	struct ufs_perf_control *perf = (struct ufs_perf_control *)data;
-	unsigned long flags;
-	u32 ctrl_flag = (boot) ? UFS_PERF_CTRL_NONE : UFS_PERF_CTRL_RELEASE;
+	struct ufs_perf *perf = (struct ufs_perf *)data;
+	enum policy_res res = R_OK;
+	unsigned long stat_bits;
+	ktime_t time = ktime_get();
+	int index;
+	enum policy_res res_t = R_OK;
+	unsigned long lba;
+	unsigned long len;
+	struct ufs_perf_stat_v1 *stat;
+	struct ufs_perf_stat_v2 *stat_v2;
 
 	if (!perf || IS_ERR(perf->handler))
 		return;
 
-	if (ctrl_flag == UFS_PERF_CTRL_RELEASE)
-		trace_ufs_exynos_perf_lock(4);
+	stat_bits = (unsigned long)perf->stat_bits;
+	lba = (cmd->cmnd[2] << 24) |
+		(cmd->cmnd[3] << 16) |
+		(cmd->cmnd[4] << 8) |
+		(cmd->cmnd[5] << 0);
+	len = cmd->request->__data_len / 512;
+	stat = &perf->stat_v1;
+	stat_v2 = &perf->stat_v2;
 
-	if (!perf->hba && hba)
-		perf->hba = hba;
-
-	spin_lock_irqsave(&perf->lock, flags);
-	perf->ctrl_flag_in_transit = ctrl_flag;
-	spin_unlock_irqrestore(&perf->lock, flags);
-	mod_timer(&perf->reset_timer, jiffies + msecs_to_jiffies(perf->th_reset_in_ms) + 1);
-}
-
-void ufs_perf_update_stat(void *data, unsigned int len, enum ufs_perf_op op)
-{
-	struct ufs_perf_control *perf = (struct ufs_perf_control *)data;
-	unsigned long flags = 0;
-	s64 time;
-	bool is_big;
-	bool is_cp_time = false;
-	u64 time_diff_in_ns;
-	u32 ctrl_flag = UFS_PERF_CTRL_NONE;
-	struct ufs_hba *hba;
-
-	u32 count;
-	s64 cp_time;
-
-	u32 th_count;
-	u32 th_period_in_ms;	/* period for check point */
-
-	BUG_ON(op >= UFS_PERF_OP_MAX);
-	if (!perf)
-		return;
-
-	if (IS_ERR(perf->handler) || IS_ERR(perf->hba))
-		return;
-
-	if (op != UFS_PERF_OP_R && op != UFS_PERF_OP_W)
-		return;
-
-	hba = perf->hba;
-
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-	del_timer_sync(&perf->reset_timer);
-	spin_lock_irqsave(hba->host->host_lock, flags);
-
-	is_big = (len >= perf->th_chunk_in_kb * 1024);
-	trace_ufs_exynos_perf_issue((int)is_big, (int)op, (int)len);
-
-	/* Once triggered, lock state is hold right befor idle */
-	if (perf->is_held)
-		return;
-
-	th_count = (is_big) ? perf->th_count_b : perf->th_count_l;
-	th_period_in_ms = (is_big) ? perf->th_period_in_ms_b :
-					perf->th_period_in_ms_l;
-	time = cpu_clock(raw_smp_processor_id());
-
-	spin_lock_irqsave(&perf->lock, flags);
-	count = (is_big) ? perf->count_b : perf->count_l;
-
-	/* in first case, just update time */
-	cp_time = (is_big) ? perf->cp_time_b : perf->cp_time_l;
-	if (perf->ctrl_flag_in_transit == UFS_PERF_CTRL_RELEASE
-	    && cp_time  == -1LL) {
-		if (is_big)
-			perf->cp_time_b = time;
-		else
-			perf->cp_time_l = time;
-		spin_unlock_irqrestore(&perf->lock, flags);
-		return;
-	}
-	spin_unlock_irqrestore(&perf->lock, flags);
-
-	/* check if check point is needed */
-	time_diff_in_ns = (cp_time > time) ? (u64)(cp_time - time) :
-				(u64)(time - cp_time);
-	if (time_diff_in_ns >= (th_period_in_ms * (1000 * 1000))) {
-		is_cp_time = true;
-
-		/* check heavy load */
-		ctrl_flag = (count + 1 >= th_count) ?
-				UFS_PERF_CTRL_LOCK : UFS_PERF_CTRL_RELEASE;
-		if (ctrl_flag == UFS_PERF_CTRL_RELEASE)
-			trace_ufs_exynos_perf_lock(2);
-	}
-
-	if (len == 524288 && op == UFS_PERF_OP_R) {
-		perf->count_b_r_cont++;
-		ctrl_flag = (perf->count_b_r_cont >= 32) ?
-				UFS_PERF_CTRL_LOCK : UFS_PERF_CTRL_NONE;
-		if (ctrl_flag == UFS_PERF_CTRL_LOCK) {
-			is_cp_time = true;
-			perf->count_b_r_cont = 0;
-		}
+	if (lba == stat->last_lba + len) {
+		stat->seq_continue_count++;
+		stat->last_lba = lba;
 	} else {
-		perf->count_b_r_cont = 0;
+		stat->seq_continue_count = 0;
+		stat->last_lba = lba;
+	}
+	stat_v2->count += cmd->request->__data_len;
+
+	for_each_set_bit(index, &stat_bits, __UPDATE_MAX) {
+		if (!(BIT(index) & perf->stat_bits))
+			continue;
+		res_t = perf->update[index](perf, qd, op, UFS_PERF_ENTRY_QUEUED);
+		if (res_t == R_CTRL)
+			res = res_t;
 	}
 
-	spin_lock_irqsave(&perf->lock, flags);
-	trace_ufs_exynos_perf_stat(is_cp_time, time_diff_in_ns, th_period_in_ms,
-			cp_time, time, count, th_count,
-			(int)perf->is_locked, (int)perf->is_active);
-	spin_unlock_irqrestore(&perf->lock, flags);
-	ufs_perf_cp_and_trg(perf, is_big, is_cp_time, time, ctrl_flag);
+	/* wake-up thread */
+	if (res == R_CTRL)
+		complete(&perf->completion);
+
+	trace_ufs_perf("update", op, qd, ktime_to_us(ktime_sub(ktime_get(), time)), res, len);
 }
 
-/* trigger perf lock based on queue depth */
-void ufs_perf_update_queue_depth(void *data, struct ufs_hba *hba)
+void ufs_perf_reset(void *data)
 {
-	struct ufs_perf_control *perf = (struct ufs_perf_control *)data;
-	unsigned int depth;
-
-	if (!perf || IS_ERR(perf->handler) || IS_ERR(perf->hba))
-		return;
-
-	/* already locked — nothing to do */
-	if (perf->is_held)
-		return;
-
-	/* th_queue_depth of 0 means uninitialised — skip */
-	if (!perf->th_queue_depth)
-		return;
-
-	/* +1 to account for the current command whose bit is set in
-	 * outstanding_reqs only after setup_xfer_req returns */
-	depth = hweight_long(hba->outstanding_reqs) + 1;
-	if (depth >= perf->th_queue_depth)
-		ufs_perf_cp_and_trg(perf, true, true,
-				    cpu_clock(raw_smp_processor_id()),
-				    UFS_PERF_CTRL_LOCK);
-}
-
-void ufs_perf_populate_dt(void *data, struct device_node *np)
-{
-	struct ufs_perf_control *perf = (struct ufs_perf_control *)data;
+	struct ufs_perf *perf = (struct ufs_perf *)data;
+	enum policy_res res = R_OK;
+	enum policy_res res_t = R_OK;
+	int index;
 
 	if (!perf || IS_ERR(perf->handler))
 		return;
 
-	/* Default, not to throttle device tp */
-	if (of_property_read_u32(np, "perf-int", &perf->pm_qos_int_value))
-		perf->pm_qos_int_value = 800000;
+	for (index = 0; index < __UPDATE_MAX; index++) {
+		if (!(BIT(index) & perf->stat_bits))
+			continue;
+		res_t = perf->update[index](perf, 0, UFS_PERF_OP_NONE, UFS_PERF_ENTRY_RESET);
+		if (res_t == R_CTRL)
+			res = res_t;
+	}
 
-	if (of_property_read_u32(np, "perf-mif", &perf->pm_qos_mif_value))
-		perf->pm_qos_mif_value = 3172000;
-
-	/* Default, to issue request fast */
-	if (of_property_read_u32(np, "perf-cluster0", &perf->pm_qos_cluster0_value))
-		perf->pm_qos_cluster0_value = 2002000;
-
-	if (of_property_read_u32(np, "perf-cluster1", &perf->pm_qos_cluster1_value))
-		perf->pm_qos_cluster1_value = 2002000;
-
-	if (of_property_read_u32(np, "perf-cluster2", &perf->pm_qos_cluster2_value))
-		perf->pm_qos_cluster2_value = 2002000;
-
-	if (of_property_read_u32(np, "perf-chunk", &perf->th_chunk_in_kb))
-		perf->th_chunk_in_kb = 128;
-
-	if (of_property_read_u32(np, "perf-count-b", &perf->th_count_b))
-		perf->th_count_b = 60;
-
-	if (of_property_read_u32(np, "perf-count-l", &perf->th_count_l))
-		perf->th_count_l = 48;
-
-	/* Default, to escape scenarios that requires power consumption */
-	if (of_property_read_u32(np, "perf-period-in-ms-b", &perf->th_period_in_ms_b))
-		perf->th_period_in_ms_b = 160;
-
-	/* Default, to escape scenarios that requires power consumption */
-	if (of_property_read_u32(np, "perf-period-in-ms-l", &perf->th_period_in_ms_l))
-		perf->th_period_in_ms_l = 3;
-
-	/* Default, to escape idle case during IO centric cases */
-	if (of_property_read_u32(np, "perf-reset-delay-in-ms", &perf->th_reset_in_ms))
-		perf->th_reset_in_ms = 100;
-
-	perf->th_count_b_r_cont = 30;
-	perf->count_b_r_cont = 0;
-
-	/* Queue-depth threshold: lock perf when this many requests are
-	 * simultaneously in flight, independent of individual request size. */
-	if (of_property_read_u32(np, "perf-queue-depth", &perf->th_queue_depth))
-		perf->th_queue_depth = 6;
+	/* wake-up thread */
+	if (res == R_CTRL)
+		complete(&perf->completion);
 }
 
-bool ufs_perf_init(void **data, struct device *dev)
+/* sysfs*/
+struct __sysfs_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct ufs_perf *perf, char *buf);
+	int (*store)(struct ufs_perf *perf, u32 value);
+};
+
+#define __SYSFS_NODE(_name)							\
+static ssize_t __sysfs_##_name##_show(struct ufs_perf *perf,			\
+						   char *buf)			\
+{										\
+	return snprintf(buf, PAGE_SIZE, "%d\n", perf->val_##_name);		\
+};										\
+static int __sysfs_##_name##_store(struct ufs_perf *perf, u32 value)		\
+{										\
+	perf->val_##_name = (s32) value;					\
+										\
+	return 0;								\
+};										\
+static struct __sysfs_attr __sysfs_node_##_name = {				\
+	.attr = { .name = #_name, .mode = 0666 },				\
+	.show = __sysfs_##_name##_show,						\
+	.store = __sysfs_##_name##_store,					\
+}										\
+
+#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
+__SYSFS_NODE(pm_qos_int);
+__SYSFS_NODE(pm_qos_mif);
+#endif
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+__SYSFS_NODE(pm_qos_cluster0);
+__SYSFS_NODE(pm_qos_cluster1);
+__SYSFS_NODE(pm_qos_cluster2);
+#endif
+
+const static struct attribute *__sysfs_attrs[] = {
+#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
+	&__sysfs_node_pm_qos_int.attr,
+	&__sysfs_node_pm_qos_mif.attr,
+#endif
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+	&__sysfs_node_pm_qos_cluster0.attr,
+	&__sysfs_node_pm_qos_cluster1.attr,
+	&__sysfs_node_pm_qos_cluster2.attr,
+#endif
+	NULL,
+};
+
+static ssize_t __sysfs_show(struct kobject *kobj,
+				     struct attribute *attr, char *buf)
 {
-	struct ufs_perf_control *perf;
+	struct ufs_perf *perf = container_of(kobj, struct ufs_perf, sysfs_kobj);
+	struct __sysfs_attr *param = container_of(attr, struct __sysfs_attr, attr);
+
+	return param->show(perf, buf);
+}
+
+static ssize_t __sysfs_store(struct kobject *kobj,
+				      struct attribute *attr,
+				      const char *buf, size_t length)
+{
+	struct ufs_perf *perf = container_of(kobj, struct ufs_perf, sysfs_kobj);
+	struct __sysfs_attr *param = container_of(attr, struct __sysfs_attr, attr);
+	u32 val;
+	int ret = 0;
+
+	if (kstrtou32(buf, 10, &val))
+		return -EINVAL;
+
+	ret = param->store(perf, val);
+	return (ret == 0) ? length : (ssize_t)ret;
+}
+
+static const struct sysfs_ops __sysfs_ops = {
+	.show	= __sysfs_show,
+	.store	= __sysfs_store,
+};
+
+static struct kobj_type __sysfs_ktype = {
+	.sysfs_ops	= &__sysfs_ops,
+	.release	= NULL,
+};
+
+static int __sysfs_init(struct ufs_perf *perf)
+{
+	int error;
+
+	/* create a path of /sys/kernel/ufs_perf_x */
+	kobject_init(&perf->sysfs_kobj, &__sysfs_ktype);
+	error = kobject_add(&perf->sysfs_kobj, kernel_kobj, "ufs_perf_%c", (char)('0'));
+	if (error) {
+		pr_err("%s register sysfs directory: %d\n",
+		       __res_token[__TOKEN_FAIL], error);
+		goto fail_kobj;
+	}
+
+	/* create attributes */
+	error = sysfs_create_files(&perf->sysfs_kobj, __sysfs_attrs);
+	if (error) {
+		pr_err("%s create sysfs files: %d\n",
+		       __res_token[__TOKEN_FAIL], error);
+		goto fail_kobj;
+	}
+
+	return 0;
+
+fail_kobj:
+	kobject_put(&perf->sysfs_kobj);
+	return error;
+}
+
+static inline void __sysfs_exit(struct ufs_perf *perf)
+{
+	kobject_put(&perf->sysfs_kobj);
+}
+
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+static void ufs_perf_remove_cpu_qos_request(struct freq_qos_request *req)
+{
+	if (freq_qos_request_active(req)) {
+#if IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+		freq_qos_tracer_remove_request(req);
+#else
+		freq_qos_remove_request(req);
+#endif
+	}
+}
+
+static void ufs_perf_unregister_cpufreq_nb(struct ufs_perf *perf)
+{
+	if (perf->cpufreq_nb_registered) {
+		cpufreq_unregister_notifier(&perf->cpufreq_nb,
+					    CPUFREQ_POLICY_NOTIFIER);
+		perf->cpufreq_nb_registered = false;
+	}
+}
+
+int ufs_perf_parse_cpu_clusters(unsigned int *clusters)
+{
+	struct device_node *cpus, *map, *cluster, *cpu_node;
+	char name[20];
+	int num_clusters;
+
+	cpus = of_find_node_by_path("/cpus");
+	if (!cpus) {
+		pr_err("No CPU information found in DT\n");
+		return -1;
+	}
+
+	map = of_get_child_by_name(cpus, "cpu-map");
+	if (!map) {
+		pr_err("No CPU MAP node found in DT\n");
+		return -1;
+	}
+
+	num_clusters = 0;
+	do {
+		snprintf(name, sizeof(name), "cluster%d", num_clusters);
+		cluster = of_get_child_by_name(map, name);
+		if (cluster) {
+			cpu_node = of_get_child_by_name(cluster, "core0");
+			if (cpu_node) {
+				cpu_node = of_parse_phandle(cpu_node, "cpu", 0);
+				clusters[num_clusters] = of_cpu_node_to_id(cpu_node);
+			}
+			if (++num_clusters >= MAX_CLUSTERS)
+				break;
+		}
+	} while (cluster);
+
+	return num_clusters;
+}
+
+static bool ufs_perf_prepare_cpu_clusters(struct ufs_perf *perf)
+{
+	if (perf->num_clusters > 0)
+		return true;
+
+	perf->num_clusters = ufs_perf_parse_cpu_clusters(perf->clusters);
+	if (perf->num_clusters == 2)
+		perf->clusters[2] = 0xFF;
+	else if (perf->num_clusters < 0) {
+		pr_err("%s: failed to parse CPU DT\n", __func__);
+		return false;
+	}
+
+	return true;
+}
+
+void ufs_init_cpufreq_request(struct ufs_perf *perf, bool add_noob)
+{
+	s32 *values[MAX_CLUSTERS] = {&perf->val_pm_qos_cluster0,
+				     &perf->val_pm_qos_cluster1,
+				     &perf->val_pm_qos_cluster2};
+
+	unsigned int wished[MAX_CLUSTERS] = {0, 0, 0};
+	int table_len, ret;
+	unsigned int i;
+	struct cpufreq_policy *policy;
+	struct cpufreq_frequency_table *pos, *table;
+	struct device *dev = perf->hba->dev;
+	struct device_node *np = dev->of_node;
+	struct device_node *child_np;
+
+	if (!ufs_perf_prepare_cpu_clusters(perf))
+		return;
+
+	child_np = of_get_child_by_name(np, "ufs-pm-qos");
+	if (!child_np)
+		dev_info(dev, "%s: No ufs-pm-qos node, not guarantee pm qos\n", __func__);
+	else {
+		ret = of_property_count_u32_elems(child_np, "cpufreq-qos-levels");
+		if (!ret)
+			dev_info(dev, "%s: No ufs-pm-qos node, not guarantee pm qos\n", __func__);
+		else if (ret > 0)
+			of_property_read_u32_array(child_np, "cpufreq-qos-levels", wished, ret);
+	}
+
+	for (i = 0; i < perf->num_clusters; ++i) {
+		policy = cpufreq_cpu_get(perf->clusters[i]);
+		if (!policy)
+			continue;
+
+		if (add_noob)
+			ufs_perf_cpufreq_nb(NULL, CPUFREQ_CREATE_POLICY, policy);
+
+		table = policy->freq_table;
+		table_len = 0;
+		cpufreq_for_each_valid_entry(pos, table) {
+			table_len++;
+		}
+		if (!table_len) {
+			cpufreq_cpu_put(policy);
+			continue;
+		}
+
+		if (table_len > wished[i])
+			pos = table + wished[i];
+		else
+			pos = table + (table_len - 1);
+
+		*values[i] = pos->frequency;
+		cpufreq_cpu_put(policy);
+	}
+}
+#endif
+
+#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
+void ufs_init_devfreq_request(struct ufs_perf *perf, struct ufs_hba *hba)
+{
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+	struct device_node *child_np;
+
+	child_np = of_get_child_by_name(np, "ufs-pm-qos");
+	perf->val_pm_qos_int = 0;
+	perf->val_pm_qos_mif = 0;
+
+	if (!child_np)
+		dev_info(dev, "%s: No ufs-pm-qos node, not guarantee pm qos\n", __func__);
+	else {
+		of_property_read_u32(child_np, "perf-int", &perf->val_pm_qos_int);
+		of_property_read_u32(child_np, "perf-mif", &perf->val_pm_qos_mif);
+	}
+
+	exynos_pm_qos_add_request(&perf->pm_qos_int, PM_QOS_DEVICE_THROUGHPUT, 0);
+	exynos_pm_qos_add_request(&perf->pm_qos_mif, PM_QOS_BUS_THROUGHPUT, 0);
+}
+#endif
+
+bool ufs_perf_init(void **data, struct ufs_hba *hba)
+{
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+	struct ufs_perf *perf;
 	bool ret = false;
 
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+	struct cpufreq_policy pol;
+#endif
+
 	/* perf and perf->handler is used to check using performance mode */
-	*data = devm_kzalloc(dev, sizeof(struct ufs_perf_control), GFP_KERNEL);
+	*data = devm_kzalloc(hba->dev, sizeof(struct ufs_perf), GFP_KERNEL);
 	if (*data == NULL)
 		goto out;
 
-	perf = (struct ufs_perf_control *)(*data);
-	_perf = perf;
+	perf = (struct ufs_perf *)(*data);
 
-	spin_lock_init(&perf->lock);
+	spin_lock_init(&perf->lock_handle);
+	init_completion(&perf->completion);
 
+	perf->hba = hba;
 	perf->handler = kthread_run(ufs_perf_handler, perf,
 				"ufs_perf_%d", 0);
 	if (IS_ERR(perf->handler))
 		goto out;
 
-	timer_setup(&perf->reset_timer, ufs_perf_reset_timer, 0);
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+	/* initial values, TODO: add sysfs nodes */
+	perf->val_pm_qos_cluster0 = 0;
+	perf->val_pm_qos_cluster1 = 0;
+	perf->val_pm_qos_cluster2 = 0;
+#endif
+
+	perf->exynos_gear_scale = 0;
+	if (of_find_property(np, "samsung,ufs-gear-scale", NULL)) {
+		dev_info(dev, "%s: enable ufs-gear-scale\n", __func__);
+		perf->exynos_gear_scale = 1;
+	}
+
 #if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
-	exynos_pm_qos_add_request(&perf->pm_qos_int, PM_QOS_DEVICE_THROUGHPUT, 0);
-	exynos_pm_qos_add_request(&perf->pm_qos_mif, PM_QOS_BUS_THROUGHPUT, 0);
+	ufs_init_devfreq_request(perf, hba);
 #endif
 
 #if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
-	perf->cpufreq_nb.notifier_call = ufs_perf_cpufreq_nb;
-	cpufreq_register_notifier(&perf->cpufreq_nb, CPUFREQ_POLICY_NOTIFIER);
+	_perf = perf;
+	if (cpufreq_get_policy(&pol, 0) != 0) {
+		if (ufs_perf_prepare_cpu_clusters(perf)) {
+			perf->cpufreq_nb.notifier_call = ufs_perf_cpufreq_nb;
+			if (!cpufreq_register_notifier(&perf->cpufreq_nb,
+						       CPUFREQ_POLICY_NOTIFIER))
+				perf->cpufreq_nb_registered = true;
+		}
+	} else {
+		ufs_init_cpufreq_request(perf, true);
+	}
 #endif
+
+	/* initial values, TODO: */
+	perf->stat_bits = UPDATE_V1;
+	if (perf->exynos_gear_scale)
+		perf->stat_bits |= UPDATE_GEAR;
+	/* register updates and ctrls */
+	ret = ufs_perf_init_v1(perf);
+	if (ret)
+		goto err_stop_thread;
+	if (perf->exynos_gear_scale)
+		ufs_gear_scale_init(perf);
+
+	/* sysfs */
+	ret = __sysfs_init(perf);
+	if (ret)
+		goto err_exit_v1;
 
 	ret = true;
 out:
 	return ret;
+
+err_exit_v1:
+	if (perf->exynos_gear_scale)
+		ufs_gear_scale_exit(perf);
+	ufs_perf_exit_v1(perf);
+err_stop_thread:
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+	ufs_perf_unregister_cpufreq_nb(perf);
+	ufs_perf_remove_cpu_qos_request(&perf->pm_qos_cluster0);
+	ufs_perf_remove_cpu_qos_request(&perf->pm_qos_cluster1);
+	ufs_perf_remove_cpu_qos_request(&perf->pm_qos_cluster2);
+#endif
+#if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
+	exynos_pm_qos_remove_request(&perf->pm_qos_int);
+	exynos_pm_qos_remove_request(&perf->pm_qos_mif);
+#endif
+	complete(&perf->completion);
+	kthread_stop(perf->handler);
+	return false;
 }
 
 void ufs_perf_exit(void *data)
 {
-	struct ufs_perf_control *perf = (struct ufs_perf_control *)data;
+	struct ufs_perf *perf = (struct ufs_perf *)data;
 
-	if (perf && !IS_ERR(perf->handler)) {
+	if (!perf || IS_ERR(perf->handler))
+		return;
+
 #if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
-		exynos_pm_qos_remove_request(&perf->pm_qos_int);
-		exynos_pm_qos_remove_request(&perf->pm_qos_mif);
+	exynos_pm_qos_remove_request(&perf->pm_qos_int);
+	exynos_pm_qos_remove_request(&perf->pm_qos_mif);
 #endif
 
-#if IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
-	freq_qos_tracer_remove_request(&perf->qos_req_cpu_cl0);
-	freq_qos_tracer_remove_request(&perf->qos_req_cpu_cl1);
-	freq_qos_tracer_remove_request(&perf->qos_req_cpu_cl2);
-#elif IS_ENABLED(CONFIG_CPU_FREQ)
-	freq_qos_remove_request(&perf->qos_req_cpu_cl0);
-	freq_qos_remove_request(&perf->qos_req_cpu_cl1);
-	freq_qos_remove_request(&perf->qos_req_cpu_cl2);
+#if IS_ENABLED(CONFIG_CPU_FREQ) || IS_ENABLED(CONFIG_ARM_FREQ_QOS_TRACER)
+	ufs_perf_unregister_cpufreq_nb(perf);
+	ufs_perf_remove_cpu_qos_request(&perf->pm_qos_cluster0);
+	ufs_perf_remove_cpu_qos_request(&perf->pm_qos_cluster1);
+	ufs_perf_remove_cpu_qos_request(&perf->pm_qos_cluster2);
 #endif
-		perf->will_stop = true;
-		complete(&perf->completion);
-		kthread_stop(perf->handler);
-	}
+
+	if (perf->exynos_gear_scale)
+		ufs_gear_scale_exit(perf);
+	ufs_perf_exit_v1(perf);
+	__sysfs_exit(perf);
+
+	complete(&perf->completion);
+	kthread_stop(perf->handler);
 }
 MODULE_AUTHOR("Kiwoong Kim <kwmad.kim@samsung.com>");
 MODULE_DESCRIPTION("Exynos UFS performance booster");
