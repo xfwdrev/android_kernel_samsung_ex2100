@@ -159,8 +159,7 @@ if [[ "$SUSFS_OPTION" == "y" ]]; then
 fi
 
 rm -rf build/out/$MODEL
-mkdir -p build/out/$MODEL/zip/files
-mkdir -p build/out/$MODEL/zip/META-INF/com/google/android
+mkdir -p build/out/$MODEL
 
 set_localversion() {
 
@@ -465,11 +464,11 @@ build_zip() {
     DATE=`date +"%d-%m-%Y_%H-%M-%S"`
 
     if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
-        NAME="${version}_${MODEL}_KSUN_SUSFS_OFFICIAL_${DATE}.zip"
+        NAME="${version}${KVER}_${MODEL}_KSUN_SUSFS_OFFICIAL_${DATE}.zip"
     elif [[ "$KSU_OPTION" == "y" ]]; then
-        NAME="${version}_${MODEL}_KSUN_OFFICIAL_${DATE}.zip"
+        NAME="${version}${KVER}_${MODEL}_KSUN_OFFICIAL_${DATE}.zip"
     else
-        NAME="${version}_${MODEL}_VANILLA_OFFICIAL_${DATE}.zip"
+        NAME="${version}${KVER}_${MODEL}_VANILLA_OFFICIAL_${DATE}.zip"
     fi
     zip -r9 "../build/out/$MODEL/$NAME" * -x ".git*" "README.md" "*placeholder" || abort
     popd > /dev/null
