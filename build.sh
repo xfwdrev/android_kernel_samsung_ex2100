@@ -171,7 +171,7 @@ set_localversion() {
 
     # Set Kernel Version Release
     if [[ "$RECOVERY_OPTION" != "y" ]]; then
-        KVER="-v6.5.2"
+        KVER="-v6.6"
     else
         KVER="-v2.6"
     fi
