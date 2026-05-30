@@ -327,11 +327,4 @@ source "fs/dlm/Kconfig"
 source "fs/unicode/Kconfig"
 
 
-config NOMOUNT
-	bool "NoMount Path Redirection Subsystem"
-	default y
-	help
-	  NoMount allows path redirection and virtual file injection
-	  without mounting filesystems. Useful for systemless modifications.
-
 endmenu
