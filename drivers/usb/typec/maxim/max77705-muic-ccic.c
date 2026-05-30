@@ -98,8 +98,7 @@ static int max77705_muic_handle_ccic_ATTACH(struct max77705_muic_data *muic_data
 			muic_data->ccic_info_data.ccic_evt_roleswap = 1;
 		} else {
 			/* Detached */
-			if (muic_data->ccic_info_data.ccic_evt_rprd)
-				need_to_run_work = true;
+			need_to_run_work = true;
 			max77705_muic_handle_ccic_detach(muic_data);
 		}
 	}

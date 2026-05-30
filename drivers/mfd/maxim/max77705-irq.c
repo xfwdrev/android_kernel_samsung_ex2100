@@ -346,7 +346,7 @@ static irqreturn_t max77705_irq_thread(int irq, void *data)
 				ret = max77705_read_reg(max77705->muic, REG_CC_STATUS0, &cc_status0);
 				vbvolt = (bc_status0 & BIT_VBUSDet) >> FFS(BIT_VBUSDet);
 				ccstat = (cc_status0 & BIT_CCStat) >> FFS(BIT_CCStat);
-				if (cc_No_Connection == ccstat && vbvolt == VB_LOW) {
+				if (cc_No_Connection == ccstat) {
 					pre_ccstati = irq_reg[CC_INT];
 					irq_reg[CC_INT] |= 0x1;
 					pr_info("[MAX77705] set the cc_stat int [work-around] :%x, %x\n",
