@@ -27,7 +27,7 @@
 #include "blk-mq-sched.h"
 #include "ssg-cgroup.h"
 
-#if !IS_ENABLED(CONFIG_BLK_SEC_STATS)
+#if IS_ENABLED(CONFIG_BLK_SEC_STATS)
 extern void blk_sec_stats_account_init(struct request_queue *q);
 extern void blk_sec_stats_account_exit(struct elevator_queue *eq);
 extern void blk_sec_stats_account_io_done(

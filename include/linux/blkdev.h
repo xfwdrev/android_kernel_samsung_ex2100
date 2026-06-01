@@ -1261,6 +1261,11 @@ static inline int sb_issue_zeroout(struct super_block *sb, sector_t block,
 
 extern int blk_verify_command(unsigned char *cmd, fmode_t mode);
 
+static inline bool bdev_is_partition(struct block_device *bdev)
+{
+	return bdev->bd_partno;
+}
+
 enum blk_default_limits {
 	BLK_MAX_SEGMENTS	= 128,
 	BLK_SAFE_MAX_SECTORS	= 255,
