@@ -37,7 +37,7 @@ config VIRTIO_FS
 	  host.
 
 	  If you want to share files between guests or with the host, answer Y
-      or M.
+	  or M.
 
 config FUSE_SUPPORT_STLOG
 	bool "Enable storage log"
