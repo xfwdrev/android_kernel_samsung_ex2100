@@ -329,14 +329,11 @@ static int parse_dirplusfile(char *buf, size_t nbytes, struct file *file,
 	return 0;
 }
 
-/* @fs.sec -- c76e2a1511237927eb0afb3c3a0fbad4 -- */
 static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 {
 	int plus;
 	ssize_t res;
 	struct page *page;
-	size_t bufsize = 32768;
-	void *buf;
 	struct inode *inode = file_inode(file);
 	struct fuse_mount *fm = get_fuse_mount(inode);
 	struct fuse_io_args ia = {};
@@ -345,13 +342,9 @@ static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 	u64 attr_version = 0;
 	bool locked;
 
-	buf = vmalloc(bufsize);
-	if (!buf) {
-		bufsize = 4096;
-		buf = vmalloc(bufsize);
-		if (!buf)
-			return -ENOMEM;
-	}
+	page = alloc_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
 
 	plus = fuse_use_readdirplus(inode, ctx);
 	ap->args.out_pages = true;
@@ -363,7 +356,7 @@ static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 		fuse_read_args_fill(&ia, file, ctx->pos, PAGE_SIZE,
 				    FUSE_READDIRPLUS);
 	} else {
-		fuse_read_args_fill(&ia, file, ctx->pos, bufsize,
+		fuse_read_args_fill(&ia, file, ctx->pos, PAGE_SIZE,
 				    FUSE_READDIR);
 	}
 	locked = fuse_lock_inode(inode);
@@ -376,7 +369,7 @@ static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 			if (ff->open_flags & FOPEN_CACHE_DIR)
 				fuse_readdir_cache_end(file, ctx->pos);
 		} else if (plus) {
-			res = parse_dirplusfile(buf, res,
+			res = parse_dirplusfile(page_address(page), res,
 						file, ctx, attr_version);
 		} else {
 			res = parse_dirfile(page_address(page), res, file,
@@ -384,7 +377,7 @@ static int fuse_readdir_uncached(struct file *file, struct dir_context *ctx)
 		}
 	}
 
-	vfree(buf);
+	__free_page(page);
 	fuse_invalidate_atime(inode);
 	return res;
 }
