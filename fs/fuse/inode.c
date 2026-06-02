@@ -1182,14 +1182,6 @@ static void process_init_limits(struct fuse_conn *fc, struct fuse_init_out *arg)
 	spin_unlock(&fc->bg_lock);
 }
 
-static void set_request_timeout(struct fuse_conn *fc, unsigned int timeout)
-{
-	fc->timeout.req_timeout = secs_to_jiffies(timeout);
-	INIT_DELAYED_WORK(&fc->timeout.work, fuse_check_timeout);
-	queue_delayed_work(system_wq, &fc->timeout.work,
-			   fuse_timeout_timer_freq);
-}
-
 struct fuse_init_args {
 	struct fuse_args args;
 	struct fuse_init_in in;
@@ -1279,8 +1271,6 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				fm->sb->s_stack_depth =
 					FILESYSTEM_MAX_STACK_DEPTH;
 			}
-			if (arg->request_timeout)
-				set_request_timeout(fc, arg->request_timeout);
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
