@@ -733,20 +733,21 @@ static void esgov_work(struct kthread_work *work)
 	freq = esg_policy->target_freq;
 	raw_spin_unlock_irqrestore(&esg_policy->update_lock, flags);
 
-	/* Upstream sugov_work() doesn't hold policy->rwsem */
 	mutex_lock(&esg_policy->work_lock);
-	__cpufreq_driver_target(esg_policy->policy, freq, CPUFREQ_RELATION_L);
+	if (freq != esg_policy->policy->cur)
+		__cpufreq_driver_target(esg_policy->policy, freq,
+					CPUFREQ_RELATION_L);
 	mutex_unlock(&esg_policy->work_lock);
 
-	/* Bounded scale-up re-check */
 	raw_spin_lock_irqsave(&esg_policy->update_lock, flags);
 	if (esg_policy->target_freq > freq) {
 		freq = esg_policy->target_freq;
 		raw_spin_unlock_irqrestore(&esg_policy->update_lock, flags);
 
 		mutex_lock(&esg_policy->work_lock);
-		__cpufreq_driver_target(esg_policy->policy, freq,
-					CPUFREQ_RELATION_L);
+		if (freq != esg_policy->policy->cur)
+			__cpufreq_driver_target(esg_policy->policy, freq,
+						CPUFREQ_RELATION_L);
 		mutex_unlock(&esg_policy->work_lock);
 
 		raw_spin_lock_irqsave(&esg_policy->update_lock, flags);
@@ -1268,17 +1269,14 @@ esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 	if (esg_policy->target_freq == target_freq)
 		goto out;
 
-	/* Scale-down rate limits and postpone checks */
-	if (target_freq < esg_policy->target_freq) {
-		if (!rapid_scale && !esgov_check_rate_delay(esg_policy, time))
-			goto out;
+	if (target_freq < esg_policy->target_freq &&
+			!rapid_scale && !esgov_check_rate_delay(esg_policy, time))
+		goto out;
 
-		if (esgov_postpone_freq_update(esg_policy, esg_cpu->cpu,
-					time, target_freq, rapid_scale))
-			goto out;
-	}
+	if (esgov_postpone_freq_update(esg_policy, esg_cpu->cpu,
+				time, target_freq, rapid_scale))
+		goto out;
 
-	/* Always update target_freq even if work is in progress */
 	esg_policy->target_freq = target_freq;
 	esg_policy->last_freq_update_time = time;
 
