@@ -118,6 +118,8 @@ enum sec_battery_capacity_mode {
 	SEC_BATTERY_CAPACITY_QH,
 	/* vfsoc */
 	SEC_BATTERY_CAPACITY_VFSOC,
+	/* rcomp0 */
+	SEC_BATTERY_CAPACITY_RC0,
 };
 
 enum sec_wireless_info_mode {

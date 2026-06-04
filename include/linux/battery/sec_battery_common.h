@@ -195,6 +195,7 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_D2D_REVERSE_VBUS,
 	POWER_SUPPLY_EXT_PROP_DC_OP_MODE,
 	POWER_SUPPLY_EXT_PROP_ADC_MODE,
+	POWER_SUPPLY_EXT_PROP_BATT_DUMP,
 };
 
 enum sec_battery_usb_conf {

@@ -35,6 +35,8 @@
 #define CAPACITY_SCALE_DEFAULT_CURRENT 1000
 #define CAPACITY_SCALE_HV_CURRENT 600
 
+#define FG_BATT_DUMP_SIZE 128
+
 enum max77705_vempty_mode {
 	VEMPTY_MODE_HW = 0,
 	VEMPTY_MODE_SW,
@@ -133,10 +135,6 @@ struct battery_data_t {
 	u32 ichgterm_2nd;
 	u32 misccfg_2nd;
 	u32 fullsocthr_2nd;
-	u32 coff_origin;
-	u32 coff_charging;
-	u32 cgain_origin;
-	u32 cgain_charging;
 };
 
 /* FullCap learning setting */
@@ -267,7 +265,6 @@ struct max77705_fuelgauge_data {
 
 	bool using_temp_compensation;
 	bool using_hw_vempty;
-	bool using_room_temperature_vempty;
 	unsigned int vempty_mode;
 	int temperature;
 	bool vempty_init_flag;
@@ -284,12 +281,13 @@ struct max77705_fuelgauge_data {
 	unsigned int verify_selected_reg_length;
 	u32 data_ver;
 	bool skip_fg_verify;
-	u32 err_cnt;
+
 
 #if defined(CONFIG_BATTERY_CISD)
 	bool valert_count_flag;
 #endif
 	struct lost_soc_data lost_soc;
+	char d_buf[FG_BATT_DUMP_SIZE];
 };
 
 #endif /* __MAX77705_FUELGAUGE_H */
