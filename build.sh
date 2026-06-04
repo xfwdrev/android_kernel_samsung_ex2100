@@ -1,5 +1,10 @@
 #!/bin/bash
 
+KCONFIG_FILE="drivers/Kconfig"
+KSU_VAR='source "drivers/kernelsu/Kconfig"'
+KVER="-v6.6"
+RVER="-v2.6"
+
 abort()
 {
     cd -
@@ -171,22 +176,22 @@ set_localversion() {
 
     # Set Kernel Version Release
     if [[ "$RECOVERY_OPTION" != "y" ]]; then
-        KVER="-v6.6"
+        VRSN=$KVER
     else
-        KVER="-v2.6"
+        VRSN=$RVER
     fi
 
-    if [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
+    if [[ "$RECOVERY_OPTION" == "y" ]]; then
+        LV_SUFFIX="-TWRP"
+    elif [[ "$KSU_OPTION" == "y" && "$SUSFS_OPTION" == "y" ]]; then
         LV_SUFFIX="-KSUN-SUSFS"
     elif [[ "$KSU_OPTION" == "y" ]]; then
         LV_SUFFIX="-KSUN"
-    elif [[ "$RECOVERY_OPTION" == "y" ]]; then
-        LV_SUFFIX="-TWRP"
     else
         LV_SUFFIX="-VANILLA"
     fi
 
-    UPDATED_LV="${BASE_LV}${KVER}${LV_SUFFIX}"
+    UPDATED_LV="${BASE_LV}${VRSN}${LV_SUFFIX}"
 
     ./scripts/config --file "$CONFIG_FILE" \
         --set-str LOCALVERSION "$UPDATED_LV"
@@ -473,9 +478,6 @@ build_zip() {
     zip -r9 "../build/out/$MODEL/$NAME" * -x ".git*" "README.md" "*placeholder" || abort
     popd > /dev/null
 }
-
-KCONFIG_FILE="drivers/Kconfig"
-KSU_VAR='source "drivers/kernelsu/Kconfig"'
 
 if [[ "$KSU_OPTION" != "y" ]]; then
 
