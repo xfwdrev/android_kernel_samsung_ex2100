@@ -2076,7 +2076,7 @@ static int sm5451_charger_probe(struct i2c_client *i2c,
 		ret = PTR_ERR(sm5451->psy_chg);
 		goto err_devmem;
 	}
-	// sec_chg_set_dev_init(SC_DEV_DIR_CHG);
+	sec_chg_set_dev_init(SC_DEV_DIR_CHG);
 
 	if (sm5451->pdata->irq_gpio >= 0) {
 		ret = sm5451_irq_init(sm5451);

@@ -5554,7 +5554,7 @@ static int pca9468_charger_probe(struct i2c_client *client,
 	if (ret < 0)
 		return ret;
 
-	// sec_chg_set_dev_init(SC_DEV_DIR_CHG);
+	sec_chg_set_dev_init(SC_DEV_DIR_CHG);
 
 #if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
 	pr_info("%s: PCA9468 Charger Driver Loaded\n", __func__);

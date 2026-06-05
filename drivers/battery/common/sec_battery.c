@@ -7306,6 +7306,9 @@ static int sec_battery_probe(struct platform_device *pdev)
 #if defined(CONFIG_BATTERY_CISD)
 	sec_battery_cisd_init(battery);
 #endif
+
+	sec_chg_check_modprobe();
+
 	/* updates temperatures on boot */
 	sec_bat_get_temperature_info(battery);
 
@@ -7721,6 +7724,8 @@ static struct platform_driver sec_battery_driver = {
 
 static int __init sec_battery_init(void)
 {
+	sec_chg_init_gdev();
+
 	return platform_driver_register(&sec_battery_driver);
 }
 

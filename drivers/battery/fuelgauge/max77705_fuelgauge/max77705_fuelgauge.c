@@ -2822,7 +2822,7 @@ static int max77705_fuelgauge_probe(struct platform_device *pdev)
 #endif
 	platform_set_drvdata(pdev, fuelgauge);
 
-	// sec_chg_set_dev_init(SC_DEV_FG);
+	sec_chg_set_dev_init(SC_DEV_FG);
 
 	pr_info("%s: max77705 Fuelgauge Driver Loaded\n", __func__);
 	return 0;

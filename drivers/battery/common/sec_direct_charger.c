@@ -863,7 +863,7 @@ static int sec_direct_charger_probe(struct platform_device *pdev)
 			"%s: Failed to Register psy_chg(%d)\n", __func__, ret);
 		goto err_power_supply_register;
 	}
-	// sec_chg_set_dev_init(SC_DEV_SEC_DIR_CHG);
+	sec_chg_set_dev_init(SC_DEV_SEC_DIR_CHG);
 
 	charger->pt = sb_pt_init(charger->dev);
 	if (IS_ERR(charger->pt)) {
