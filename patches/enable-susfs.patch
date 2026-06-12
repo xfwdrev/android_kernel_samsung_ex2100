@@ -1,6 +1,6 @@
-From bdec99d58a7b9c01a3b9868b7036432207d1e85c Mon Sep 17 00:00:00 2001
+From 7660eb2452fe6ecd41e9876a2a2682dc180c6e37 Mon Sep 17 00:00:00 2001
 From: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
-Date: Thu, 7 May 2026 12:22:00 +0800
+Date: Fri, 12 Jun 2026 17:40:26 +0800
 Subject: [PATCH] Patch KSU Next enable SuSFS 2.1.0 with de-inlined hooks
 
 Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
@@ -15,8 +15,8 @@ Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
  kernel/selinux/selinux.c       | 96 +++++++++++++++++++++++++++++++++
  kernel/selinux/selinux.h       | 13 +++++
  kernel/supercall/dispatch.c    | 37 ++++++++++++-
- kernel/supercall/supercall.c   | 94 ++++++++++++++++++++++++++++++++
- 11 files changed, 472 insertions(+), 7 deletions(-)
+ kernel/supercall/supercall.c   | 96 ++++++++++++++++++++++++++++++++-
+ 11 files changed, 473 insertions(+), 8 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
 index 8e8b78e5..2ffdcd6e 100644
@@ -145,7 +145,7 @@ index 5d1ad6e4..cf74ec54 100644
 +
  endmenu
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index 3c151c6b..f1b63c39 100644
+index d29f5458..6c1540bd 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
 @@ -18,6 +18,9 @@
@@ -158,7 +158,7 @@ index 3c151c6b..f1b63c39 100644
  #include "selinux/selinux.h"
  
  extern void __init ksu_lsm_hook_init(void);
-@@ -140,6 +143,10 @@ int __init kernelsu_init(void)
+@@ -143,6 +146,10 @@ int __init kernelsu_init(void)
  
  		ksu_throne_tracker_init();
  
@@ -406,14 +406,13 @@ index 8f8eb679..7b9d7db4 100644
  }
  
 diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
-index 2f1f0f6a..dc1da539 100644
+index 257d20c9..bb83a3b9 100644
 --- a/kernel/selinux/selinux.c
 +++ b/kernel/selinux/selinux.c
-@@ -244,3 +244,99 @@ bool is_init(const struct cred *cred)
- {
+@@ -245,6 +245,102 @@ bool is_init(const struct cred *cred)
      return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
  }
-+
+ 
 +#ifdef CONFIG_KSU_SUSFS
 +#define KERNEL_INIT_DOMAIN "u:r:init:s0"
 +#define KERNEL_ZYGOTE_DOMAIN "u:r:zygote:s0"
@@ -509,12 +508,15 @@ index 2f1f0f6a..dc1da539 100644
 +    susfs_set_sid(KERNEL_PRIV_APP_DOMAIN, &susfs_priv_app_sid);
 +}
 +#endif // #ifdef CONFIG_KSU_SUSFS
-\ No newline at end of file
++
+ /* --------------- fake SELinux status page --------------- */
+ 
+ #include <linux/fs.h>
 diff --git a/kernel/selinux/selinux.h b/kernel/selinux/selinux.h
-index 397aae24..92995351 100644
+index 93e932da..49ad1403 100644
 --- a/kernel/selinux/selinux.h
 +++ b/kernel/selinux/selinux.h
-@@ -63,4 +63,17 @@ void setup_ksu_cred();
+@@ -68,4 +68,17 @@ void setup_ksu_cred();
  
  extern u32 ksu_file_sid;
  
@@ -625,7 +627,7 @@ index 6b9a117a..7b24c93f 100644
  	}
  	default: {
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index 1921ab64..938b2224 100644
+index 1921ab64..bcc18acb 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -11,6 +11,11 @@
