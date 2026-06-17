@@ -945,8 +945,8 @@ KBUILD_LDFLAGS	+= --thinlto-cache-dir=.thinlto-cache
 
 # LLVM tunings
 LD_FLAGS_LTO_CLANG += -mllvm -import-hot-multiplier=2
-LD_FLAGS_LTO_CLANG += -mllvm -inline-threshold=500
-LD_FLAGS_LTO_CLANG += -mllvm -import-instr-limit=80
+LD_FLAGS_LTO_CLANG += -mllvm -inline-threshold=300
+LD_FLAGS_LTO_CLANG += -mllvm -import-instr-limit=30
 else
 CC_FLAGS_LTO_CLANG := -flto
 endif
