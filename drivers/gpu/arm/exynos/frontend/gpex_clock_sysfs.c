@@ -19,6 +19,7 @@
  */
 
 #include <linux/binfmts.h>
+#include <linux/kernel.h>
 
 #include <gpex_clock.h>
 #include <gpex_pm.h>
@@ -218,6 +219,51 @@ GPEX_STATIC ssize_t show_max_lock_dvfs(char *buf)
 	return ret;
 }
 CREATE_SYSFS_DEVICE_READ_FUNCTION(show_max_lock_dvfs)
+
+GPEX_STATIC ssize_t show_gpu_clamp(char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", READ_ONCE(clk_info->gpu_clamp_input));
+}
+CREATE_SYSFS_KOBJECT_READ_FUNCTION(show_gpu_clamp)
+
+GPEX_STATIC ssize_t set_gpu_clamp(const char *buf, size_t count)
+{
+	int ret;
+	unsigned int clock = 0;
+	unsigned int requested_clock;
+
+	ret = kstrtouint(buf, 0, &clock);
+	if (ret) {
+		GPU_LOG(MALI_EXYNOS_WARNING, "%s: invalid value\n", __func__);
+		return -ENOENT;
+	}
+	if (clock > INT_MAX) {
+		GPU_LOG(MALI_EXYNOS_WARNING, "%s: invalid clock value (%u)\n", __func__,
+			clock);
+		return -ENOENT;
+	}
+
+	requested_clock = clock;
+
+	if (!clock) {
+		WRITE_ONCE(clk_info->gpu_clamp_input, clock);
+		gpex_clock_lock_clock(GPU_CLOCK_MAX_UNLOCK, FC_LOCK, 0);
+		return count;
+	}
+
+	clock = gpex_get_valid_gpu_clock(clock, false);
+	if (gpex_clock_get_table_idx(clock) < 0) {
+		GPU_LOG(MALI_EXYNOS_WARNING, "%s: invalid clock value (%d)\n", __func__,
+			clock);
+		return -ENOENT;
+	}
+
+	WRITE_ONCE(clk_info->gpu_clamp_input, requested_clock);
+	gpex_clock_lock_clock(GPU_CLOCK_MAX_LOCK, FC_LOCK, clock);
+
+	return count;
+}
+CREATE_SYSFS_KOBJECT_WRITE_FUNCTION(set_gpu_clamp)
 
 GPEX_STATIC ssize_t show_max_lock_dvfs_kobj(char *buf)
 {
@@ -563,6 +609,7 @@ int gpex_clock_sysfs_init(struct _clock_info *_clk_info)
 	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD_RO(gpu_clock, show_clock);
 	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD_RO(gpu_freq_table, show_gpu_freq_table);
 	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD(gpu_unlock, show_gpu_unlock, set_gpu_unlock);
+	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD(gpu_clamp, show_gpu_clamp, set_gpu_clamp);
 
 	return 0;
 }
