@@ -951,10 +951,6 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 	char *page;
 	unsigned int flags;
 
-#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-	struct vm_area_struct *vma;
-#endif
-
 	if (!mm)
 		return 0;
 
@@ -972,22 +968,6 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 
 	while (count > 0) {
 		size_t this_len = min_t(size_t, count, PAGE_SIZE);
-#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-		vma = find_vma(mm, addr);
-		if (vma && vma->vm_file) {
-			struct inode *inode = file_inode(vma->vm_file);
-			if (SUSFS_IS_INODE_SUS_MAP(inode)) {
-				if (write) {
-					copied = -EFAULT;
-				} else {
-					copied = -EIO;
-				}
-				*ppos = addr;
-				mmput(mm);
-				goto free;
-			}
-		}
-#endif
 
 		if (write && copy_from_user(page, buf, this_len)) {
 			copied = -EFAULT;
@@ -2336,9 +2316,6 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 	GENRADIX(struct map_files_info) fa;
 	struct map_files_info *p;
 	int ret;
-#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-	struct inode *inode;
-#endif
 
 	genradix_init(&fa);
 
@@ -2381,8 +2358,7 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 		if (!vma->vm_file)
 			continue;
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-		inode = file_inode(vma->vm_file);
-		if (SUSFS_IS_INODE_SUS_MAP(inode))
+		if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
 			continue;
 #endif
 		if (++pos <= ctx->pos)
