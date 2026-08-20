@@ -77,24 +77,6 @@ enable_susfs() {
     fi
 }
 
-apply_reboot() {
-
-    KSUN_DIR="$PWD/KernelSU-Next/kernel"
-
-    if grep -q "magic1 != KSU_INSTALL_MAGIC1" "$KSUN_DIR/supercall/supercall.c" && \
-       grep -q "return -EINVAL" "$KSUN_DIR/supercall/supercall.c"; then
-        echo "Reboot patch already applied, skipping..."
-        return
-    fi
-
-    echo "Applying reboot patch to KernelSU Next..."
-
-    patch -d "$PWD/KernelSU-Next" -p1 < "$PWD/patches/ksu-reboot.patch" || {
-        echo "Failed to apply reboot patch!"
-        exit 1
-    }
-}
-
 echo "Preparing the build environment..."
 
 pushd $(dirname "$0") > /dev/null
@@ -484,8 +466,6 @@ if [[ "$KSU_OPTION" != "y" ]]; then
     sed -i "\|$KSU_VAR|d" "$KCONFIG_FILE"
 
 else
-
-    apply_reboot
     enable_susfs
     
     if ! grep -Fxq "$KSU_VAR" "$KCONFIG_FILE"; then
