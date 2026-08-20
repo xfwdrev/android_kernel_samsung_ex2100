@@ -95,6 +95,7 @@
 #define MFC_EXTRA_DPB		5
 
 #define MFC_BASE_MASK		((1 << 17) - 1)
+#define MFC_BASE_ADDR		0x10000000
 
 /* Error & Warning */
 #define mfc_get_err(x)		(((x) >> MFC_REG_ERR_STATUS_SHIFT)	\

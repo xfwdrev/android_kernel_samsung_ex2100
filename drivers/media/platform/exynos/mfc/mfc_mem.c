@@ -764,8 +764,9 @@ static int mfc_iommu_map_firmware_ion(struct mfc_core *core, struct mfc_special_
 {
 	struct mfc_dev *dev = core->dev;
 	dma_addr_t fw_base_addr;
+	int ret;
 
-	fw_base_addr = 0x10000000 + dev->fw_base_offset;
+	fw_base_addr = MFC_BASE_ADDR + dev->fw_base_offset;
 
 	fw_buf->map_size = iommu_map_sg(core->domain, fw_base_addr,
 			fw_buf->sgt->sgl,
@@ -779,6 +780,28 @@ static int mfc_iommu_map_firmware_ion(struct mfc_core *core, struct mfc_special_
 
 	fw_buf->daddr = fw_base_addr;
 	dev->fw_base_offset += fw_buf->map_size;
+
+	if (fw_base_addr == MFC_BASE_ADDR) {
+		ret = iommu_dma_reserve_iova(core->device, 0x0, MFC_BASE_ADDR);
+		if (ret) {
+			mfc_core_err("failed to reserve dva for fw(0x%pad)\n",
+					&fw_buf->daddr);
+			iommu_unmap(core->domain, fw_buf->daddr, fw_buf->map_size);
+			fw_buf->daddr = 0;
+			fw_buf->map_size = 0;
+			return ret;
+		}
+	}
+
+	ret = iommu_dma_reserve_iova(core->device, fw_buf->daddr, fw_buf->map_size);
+	if (ret) {
+		mfc_core_err("failed to reserve dva for fw(0x%pad)\n",
+				&fw_buf->daddr);
+		iommu_unmap(core->domain, fw_buf->daddr, fw_buf->map_size);
+		fw_buf->daddr = 0;
+		fw_buf->map_size = 0;
+		return ret;
+	}
 
 	return 0;
 }
