@@ -1,11 +1,11 @@
-From ea78d31b2c6140b4ac373fd34751652f4fa967b3 Mon Sep 17 00:00:00 2001
+From 386c72974aef5688de518f1e840ee3f0a3bb91a1 Mon Sep 17 00:00:00 2001
 From: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
-Date: Mon, 13 Jul 2026 10:44:44 +0800
+Date: Thu, 20 Aug 2026 21:20:22 +0800
 Subject: [PATCH] Patch KSU Next enable SuSFS 2.2.0 with de-inlined hooks
 
 Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
 ---
- kernel/Kbuild                  | 10 ++++
+ kernel/Kbuild                  | 46 +++++-----------
  kernel/Kconfig                 | 98 ++++++++++++++++++++++++++++++++++
  kernel/core/init.c             |  7 +++
  kernel/feature/kernel_umount.c | 16 +++++-
@@ -15,14 +15,63 @@ Signed-off-by: xfwdrev <74693315+xfwdrev@users.noreply.github.com>
  kernel/selinux/selinux.c       | 96 +++++++++++++++++++++++++++++++++
  kernel/selinux/selinux.h       | 13 +++++
  kernel/supercall/dispatch.c    | 36 ++++++++++++-
- kernel/supercall/supercall.c   | 94 ++++++++++++++++++++++++++++++++
- 11 files changed, 472 insertions(+), 6 deletions(-)
+ kernel/supercall/supercall.c   | 96 ++++++++++++++++++++++++++++++++-
+ 11 files changed, 476 insertions(+), 40 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index d1fe5dd9..51022d2d 100644
+index d1fe5dd9..96f6575a 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
-@@ -307,4 +307,14 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
+@@ -70,45 +70,15 @@ obj-$(CONFIG_KSU) += kernelsu.o
+ LPATH := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin
+ MDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ 
+-# Check if this is a git repository
+-# Try to detect Git repo intelligently
+-GIT_ROOT := $(shell cd $(MDIR) && $(LPATH) git rev-parse --show-toplevel 2>/dev/null)
+-ifneq ($(GIT_ROOT),)
+-KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplevel 2>/dev/null)
+-ifneq ($(GIT_ROOT),$(KERNEL_GIT_ROOT))
+-# Only set version if it's a different repo from kernel
+-$(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(LPATH) git fetch --unshallow 2>/dev/null || true)
+-KSU_GIT_VERSION := $(shell cd $(GIT_ROOT) && $(LPATH) git rev-list --count HEAD 2>/dev/null)
+-KSU_GIT_TAG := $(shell cd $(GIT_ROOT) && $(LPATH) git describe --tags --abbrev=0 2>/dev/null)
+-KSU_GIT_VERSION_VALID := 1
+-$(info -- KernelSU-Next Git repo detected at: $(GIT_ROOT))
+-endif
+-endif
+-
+-# Calculate version if git version is available
+-ifdef KSU_GIT_VERSION_VALID
+-# ksu_version: major * 30000 + git version for historical reasons
+-$(eval KSU_VERSION=$(shell expr 30000 + $(KSU_GIT_VERSION) + 200))
++$(eval KSU_VERSION=33214)
+ $(info -- KernelSU-Next version: $(KSU_VERSION))
+ ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
+-else
+-# If there is no .git directory, use default version
+-$(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU-Next a git repository!")
+-KSU_VERSION_FALLBACK := 1
+-$(info -- KernelSU-Next version fallback: $(KSU_VERSION_FALLBACK))
+-ccflags-y += -DKSU_VERSION=$(KSU_VERSION_FALLBACK)
+-endif
+ 
+-ifdef KSU_GIT_VERSION_VALID
++KSU_GIT_TAG := v3.3.0-legacy-unofficial
++
+ $(eval KSU_VERSION_TAG=$(KSU_GIT_TAG))
+ $(info -- KernelSU-Next tag: $(KSU_VERSION_TAG))
+ ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG)\"
+-else
+-$(warning "KSU_VERSION_TAG not defined! It is better to make KernelSU-Next a git submodule!")
+-KSU_VERSION_TAG_FALLBACK := v0.0.1
+-$(info -- KernelSU-Next tag fallback: $(KSU_VERSION_TAG_FALLBACK))
+-ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG_FALLBACK)\"
+-endif
+ 
+ ifndef KSU_NEXT_MANAGER_SIZE
+ KSU_NEXT_MANAGER_SIZE := 0x3e6
+@@ -307,4 +277,14 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
  ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
  ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
  
@@ -38,7 +87,7 @@ index d1fe5dd9..51022d2d 100644
 +
  # Keep a new line here!! Because someone may append config
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index 5d1ad6e4..cf74ec54 100644
+index 5d1ad6e4..88fee240 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -59,4 +59,102 @@ config KSU_KPROBES_HOOK
@@ -50,7 +99,7 @@ index 5d1ad6e4..cf74ec54 100644
 +    bool "KernelSU addon - SUSFS"
 +    depends on KSU
 +    depends on THREAD_INFO_IN_TASK
-+    default y
++    default n
 +    help
 +        Patch and Enable SUSFS to kernel with KernelSU.
 +
@@ -626,7 +675,7 @@ index 2fb561e4..c8509b69 100644
  	}
  	default: {
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index b5a780eb..8384c8b3 100644
+index b5a780eb..68990928 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -11,6 +11,11 @@
@@ -641,7 +690,15 @@ index b5a780eb..8384c8b3 100644
  
  #include "uapi/supercall.h"
  #include "supercall/internal.h"
-@@ -79,6 +84,95 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+@@ -72,13 +77,102 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+ 			  void __user **arg)
+ {
+ 	if (magic1 != KSU_INSTALL_MAGIC1)
+-		return 0;
++		return -EINVAL;
+ 
+ #ifdef CONFIG_KSU_DEBUG
+ 	pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1,
  		magic2);
  #endif
  
