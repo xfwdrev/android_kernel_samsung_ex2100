@@ -554,6 +554,7 @@ void mfc_put_iovmm(struct mfc_ctx *ctx, struct dpb_table *dpb, int num_planes, i
 		dpb[index].addr[i] = 0;
 		dpb[index].attach[i] = NULL;
 		dpb[index].dmabufs[i] = NULL;
+		dpb[index].sgt[i] = NULL;
 	}
 
 	dpb[index].new_fd = -1;
