@@ -58,6 +58,7 @@
  // thread_info->flags is unsigned long :D
 #define TIF_PROC_UMOUNTED 33
 #define TIF_PROC_NO_SU 34
+#define TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT 35
 
 #define AS_FLAGS_SUS_PATH 33
 #define AS_FLAGS_SUS_MOUNT 34
@@ -85,6 +86,18 @@ static inline void susfs_set_current_proc_umounted(void) {
 
 static inline void susfs_clear_current_proc_umounted(void) {
 	clear_ti_thread_flag(&current->thread_info, TIF_PROC_UMOUNTED);
+}
+
+static inline bool susfs_is_current_proc_umounted_for_zygote_next(void) {
+	return test_ti_thread_flag(&current->thread_info, TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT);
+}
+
+static inline void susfs_set_current_proc_umounted_for_zygote_next(void) {
+	set_ti_thread_flag(&current->thread_info, TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT);
+}
+
+static inline void susfs_clear_current_proc_umounted_for_zygote_next(void) {
+	clear_ti_thread_flag(&current->thread_info, TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT);
 }
 
 static inline bool susfs_is_current_proc_umounted_app(void) {
