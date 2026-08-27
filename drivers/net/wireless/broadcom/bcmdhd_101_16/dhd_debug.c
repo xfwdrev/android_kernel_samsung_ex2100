@@ -425,7 +425,6 @@ done:
 #define LOG_PRINT_THRESH (1u * USEC_PER_SEC)
 #endif
 #define EL_PARSE_VER	"V02"
-static uint64 verboselog_ts_saved = 0;
 
 bool
 dhd_dbg_process_event_log_hdr(event_log_hdr_t *log_hdr, prcd_event_log_hdr_t *prcd_log_hdr)
@@ -527,7 +526,6 @@ dhd_dbg_verboselog_handler(dhd_pub_t *dhdp, prcd_event_log_hdr_t *plog_hdr,
 		if (ts_hdr->tag == EVENT_LOG_TAG_TS) {
 			ts_data = (uint32 *)ts_hdr - ts_hdr->count;
 			if (ts_data >= data) {
-				verboselog_ts_saved = (uint64)ts_data[0];
 				DHD_MSGTRACE_LOG(("EVENT_LOG_TS[0x%08x]: SYS:%08x CPU:%08x\n",
 					ts_data[ts_hdr->count - 1], ts_data[0], ts_data[1]));
 			}
