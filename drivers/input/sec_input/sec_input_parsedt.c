@@ -59,6 +59,7 @@ int sec_input_parse_dt(struct device *dev)
 	}
 
 	mutex_init(&pdata->irq_lock);
+	mutex_init(&pdata->enable_mutex);
 
 	pdata->irq_gpio = of_get_named_gpio(np, "sec,irq_gpio", 0);
 	if (gpio_is_valid(pdata->irq_gpio)) {

@@ -1500,6 +1500,7 @@ static int slsi_ts_init(struct i2c_client *client)
 	ts->plat_data->lpmode = slsi_ts_set_lowpowermode;
 	ts->plat_data->set_grip_data = slsi_set_grip_data_to_ic;
 	ts->plat_data->set_temperature = slsi_ts_set_temperature;
+	mutex_init(&ts->plat_data->enable_mutex);
 	ts->plat_data->enable = slsi_ts_enable;
 	ts->plat_data->disable = slsi_ts_disable;
 
