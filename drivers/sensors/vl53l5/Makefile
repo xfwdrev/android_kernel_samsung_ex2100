@@ -70,7 +70,7 @@ ccflags-y	+= -I$(srctree)/drivers/sensors/vl53l5/bare_driver/api/inc
 ccflags-y	+= -I$(srctree)/drivers/sensors/vl53l5/bare_driver/dci/inc
 ccflags-y	+= -I$(srctree)/drivers/sensors/vl53l5/platform/inc
 ccflags-y	+= -I$(srctree)/drivers/sensors/vl53l5/algo/inc
-ccflags-y	+= -Wall -Werror -Wno-missing-braces
+ccflags-y	+= -Wall -Werror -Wno-missing-braces -Wno-unused-but-set-variable
 
 ifeq "$(OFFSET_CAL_ENABLE)" "TRUE"
   $(warning OFFSET_CAL_ENABLE=$(OFFSET_CAL_ENABLE))
