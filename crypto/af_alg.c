@@ -481,8 +481,8 @@ static int af_alg_cmsg_send(struct msghdr *msg, struct af_alg_control *con)
 /**
  * af_alg_alloc_tsgl - allocate the TX SGL
  *
- * @sk socket of connection to user space
- * @return: 0 upon success, < 0 upon error
+ * @sk: socket of connection to user space
+ * Return: 0 upon success, < 0 upon error
  */
 static int af_alg_alloc_tsgl(struct sock *sk)
 {
@@ -515,17 +515,15 @@ static int af_alg_alloc_tsgl(struct sock *sk)
 }
 
 /**
- * aead_count_tsgl - Count number of TX SG entries
+ * af_alg_count_tsgl - Count number of TX SG entries
  *
- * The counting starts from the beginning of the SGL to @bytes. If
- * an offset is provided, the counting of the SG entries starts at the offset.
+ * The counting starts from the beginning of the SGL to @bytes.
  *
- * @sk socket of connection to user space
- * @bytes Count the number of SG entries holding given number of bytes.
- * @offset Start the counting of SG entries from the given offset.
- * @return Number of TX SG entries found given the constraints
+ * @sk: socket of connection to user space
+ * @bytes: Count the number of SG entries holding given number of bytes.
+ * Return: Number of TX SG entries found given the constraints
  */
-unsigned int af_alg_count_tsgl(struct sock *sk, size_t bytes, size_t offset)
+unsigned int af_alg_count_tsgl(struct sock *sk, size_t bytes)
 {
 	const struct alg_sock *ask = alg_sk(sk);
 	const struct af_alg_ctx *ctx = ask->private;
@@ -540,25 +538,11 @@ unsigned int af_alg_count_tsgl(struct sock *sk, size_t bytes, size_t offset)
 		const struct scatterlist *sg = sgl->sg;
 
 		for (i = 0; i < sgl->cur; i++) {
-			size_t bytes_count;
-
-			/* Skip offset */
-			if (offset >= sg[i].length) {
-				offset -= sg[i].length;
-				bytes -= sg[i].length;
-				continue;
-			}
-
-			bytes_count = sg[i].length - offset;
-
-			offset = 0;
 			sgl_count++;
-
-			/* If we have seen requested number of bytes, stop */
-			if (bytes_count >= bytes)
+			if (sg[i].length >= bytes)
 				return sgl_count;
 
-			bytes -= bytes_count;
+			bytes -= sg[i].length;
 		}
 	}
 
@@ -567,22 +551,17 @@ unsigned int af_alg_count_tsgl(struct sock *sk, size_t bytes, size_t offset)
 EXPORT_SYMBOL_GPL(af_alg_count_tsgl);
 
 /**
- * aead_pull_tsgl - Release the specified buffers from TX SGL
+ * af_alg_pull_tsgl - Release the specified buffers from TX SGL
  *
- * If @dst is non-null, reassign the pages to dst. The caller must release
- * the pages. If @dst_offset is given only reassign the pages to @dst starting
- * at the @dst_offset (byte). The caller must ensure that @dst is large
- * enough (e.g. by using af_alg_count_tsgl with the same offset).
+ * If @dst is non-null, reassign the pages to @dst. The caller must release
+ * the pages.
  *
- * @sk socket of connection to user space
- * @used Number of bytes to pull from TX SGL
- * @dst If non-NULL, buffer is reassigned to dst SGL instead of releasing. The
- *	caller must release the buffers in dst.
- * @dst_offset Reassign the TX SGL from given offset. All buffers before
- *	       reaching the offset is released.
+ * @sk: socket of connection to user space
+ * @used: Number of bytes to pull from TX SGL
+ * @dst: If non-NULL, buffer is reassigned to dst SGL instead of releasing. The
+ *	 caller must release the buffers in dst.
  */
-void af_alg_pull_tsgl(struct sock *sk, size_t used, struct scatterlist *dst,
-		      size_t dst_offset)
+void af_alg_pull_tsgl(struct sock *sk, size_t used, struct scatterlist *dst)
 {
 	struct alg_sock *ask = alg_sk(sk);
 	struct af_alg_ctx *ctx = ask->private;
@@ -606,19 +585,11 @@ void af_alg_pull_tsgl(struct sock *sk, size_t used, struct scatterlist *dst,
 			 * Assumption: caller created af_alg_count_tsgl(len)
 			 * SG entries in dst.
 			 */
-			if (dst) {
-				if (dst_offset >= plen) {
-					/* discard page before offset */
-					dst_offset -= plen;
-				} else {
-					/* reassign page to dst after offset */
-					get_page(page);
-					sg_set_page(dst + j, page,
-						    plen - dst_offset,
-						    sg[i].offset + dst_offset);
-					dst_offset = 0;
-					j++;
-				}
+			if (dst && plen) {
+				/* reassign page to dst */
+				get_page(page);
+				sg_set_page(dst + j, page, plen, sg[i].offset);
+				j++;
 			}
 
 			sg[i].length -= plen;
@@ -647,7 +618,7 @@ EXPORT_SYMBOL_GPL(af_alg_pull_tsgl);
 /**
  * af_alg_free_areq_sgls - Release TX and RX SGLs of the request
  *
- * @areq Request holding the TX and RX SGL
+ * @areq: Request holding the TX and RX SGL
  */
 static void af_alg_free_areq_sgls(struct af_alg_async_req *areq)
 {
@@ -682,9 +653,9 @@ static void af_alg_free_areq_sgls(struct af_alg_async_req *areq)
 /**
  * af_alg_wait_for_wmem - wait for availability of writable memory
  *
- * @sk socket of connection to user space
- * @flags If MSG_DONTWAIT is set, then only report if function would sleep
- * @return 0 when writable memory is available, < 0 upon error
+ * @sk: socket of connection to user space
+ * @flags: If MSG_DONTWAIT is set, then only report if function would sleep
+ * Return: 0 when writable memory is available, < 0 upon error
  */
 static int af_alg_wait_for_wmem(struct sock *sk, unsigned int flags)
 {
@@ -715,7 +686,7 @@ static int af_alg_wait_for_wmem(struct sock *sk, unsigned int flags)
 /**
  * af_alg_wmem_wakeup - wakeup caller when writable memory is available
  *
- * @sk socket of connection to user space
+ * @sk: socket of connection to user space
  */
 void af_alg_wmem_wakeup(struct sock *sk)
 {
@@ -738,10 +709,10 @@ EXPORT_SYMBOL_GPL(af_alg_wmem_wakeup);
 /**
  * af_alg_wait_for_data - wait for availability of TX data
  *
- * @sk socket of connection to user space
- * @flags If MSG_DONTWAIT is set, then only report if function would sleep
- * @min Set to minimum request size if partial requests are allowed.
- * @return 0 when writable memory is available, < 0 upon error
+ * @sk: socket of connection to user space
+ * @flags: If MSG_DONTWAIT is set, then only report if function would sleep
+ * @min: Set to minimum request size if partial requests are allowed.
+ * Return: 0 when writable memory is available, < 0 upon error
  */
 int af_alg_wait_for_data(struct sock *sk, unsigned flags, unsigned min)
 {
@@ -780,7 +751,7 @@ EXPORT_SYMBOL_GPL(af_alg_wait_for_data);
 /**
  * af_alg_data_wakeup - wakeup caller when new data can be sent to kernel
  *
- * @sk socket of connection to user space
+ * @sk: socket of connection to user space
  */
 static void af_alg_data_wakeup(struct sock *sk)
 {
@@ -810,12 +781,12 @@ static void af_alg_data_wakeup(struct sock *sk)
  *
  * In addition, the ctx is filled with the information sent via CMSG.
  *
- * @sock socket of connection to user space
- * @msg message from user space
- * @size size of message from user space
- * @ivsize the size of the IV for the cipher operation to verify that the
+ * @sock: socket of connection to user space
+ * @msg: message from user space
+ * @size: size of message from user space
+ * @ivsize: the size of the IV for the cipher operation to verify that the
  *	   user-space-provided IV has the right size
- * @return the number of copied data upon success, < 0 upon error
+ * Return: the number of copied data upon success, < 0 upon error
  */
 int af_alg_sendmsg(struct socket *sock, struct msghdr *msg, size_t size,
 		   unsigned int ivsize)
@@ -852,6 +823,12 @@ int af_alg_sendmsg(struct socket *sock, struct msghdr *msg, size_t size,
 	}
 
 	lock_sock(sk);
+	if (ctx->write) {
+		release_sock(sk);
+		return -EBUSY;
+	}
+	ctx->write = true;
+
 	if (ctx->init && !ctx->more) {
 		if (ctx->used) {
 			err = -EINVAL;
@@ -959,6 +936,7 @@ int af_alg_sendmsg(struct socket *sock, struct msghdr *msg, size_t size,
 
 unlock:
 	af_alg_data_wakeup(sk);
+	ctx->write = false;
 	release_sock(sk);
 
 	return copied ?: err;
@@ -967,6 +945,11 @@ EXPORT_SYMBOL_GPL(af_alg_sendmsg);
 
 /**
  * af_alg_sendpage - sendpage system call handler
+ * @sock: socket of connection to user space to write to
+ * @page: data to send
+ * @offset: offset into page to begin sending
+ * @size: length of data
+ * @flags: message send/receive flags
  *
  * This is a generic implementation of sendpage to fill ctx->tsgl_list.
  */
@@ -1025,6 +1008,7 @@ EXPORT_SYMBOL_GPL(af_alg_sendpage);
 
 /**
  * af_alg_free_resources - release resources required for crypto request
+ * @areq: Request holding the TX and RX SGL
  */
 void af_alg_free_resources(struct af_alg_async_req *areq)
 {
@@ -1041,6 +1025,9 @@ EXPORT_SYMBOL_GPL(af_alg_free_resources);
 
 /**
  * af_alg_async_cb - AIO callback handler
+ * @_req: async request info
+ * @err: if non-zero, error result to be returned via ki_complete();
+ *       otherwise return the AIO output length via ki_complete().
  *
  * This handler cleans up the struct af_alg_async_req upon completion of the
  * AIO operation.
@@ -1067,6 +1054,9 @@ EXPORT_SYMBOL_GPL(af_alg_async_cb);
 
 /**
  * af_alg_poll - poll system call handler
+ * @file: file pointer
+ * @sock: socket to poll
+ * @wait: poll_table
  */
 __poll_t af_alg_poll(struct file *file, struct socket *sock,
 			 poll_table *wait)
@@ -1092,9 +1082,9 @@ EXPORT_SYMBOL_GPL(af_alg_poll);
 /**
  * af_alg_alloc_areq - allocate struct af_alg_async_req
  *
- * @sk socket of connection to user space
- * @areqlen size of struct af_alg_async_req + crypto_*_reqsize
- * @return allocated data structure or ERR_PTR upon error
+ * @sk: socket of connection to user space
+ * @areqlen: size of struct af_alg_async_req + crypto_*_reqsize
+ * Return: allocated data structure or ERR_PTR upon error
  */
 struct af_alg_async_req *af_alg_alloc_areq(struct sock *sk,
 					   unsigned int areqlen)
@@ -1110,14 +1100,13 @@ struct af_alg_async_req *af_alg_alloc_areq(struct sock *sk,
 	if (unlikely(!areq))
 		return ERR_PTR(-ENOMEM);
 
+	memset(areq, 0, areqlen);
+
 	ctx->inflight = true;
 
 	areq->areqlen = areqlen;
 	areq->sk = sk;
-	areq->last_rsgl = NULL;
 	INIT_LIST_HEAD(&areq->rsgl_list);
-	areq->tsgl = NULL;
-	areq->tsgl_entries = 0;
 
 	return areq;
 }
@@ -1127,13 +1116,13 @@ EXPORT_SYMBOL_GPL(af_alg_alloc_areq);
  * af_alg_get_rsgl - create the RX SGL for the output data from the crypto
  *		     operation
  *
- * @sk socket of connection to user space
- * @msg user space message
- * @flags flags used to invoke recvmsg with
- * @areq instance of the cryptographic request that will hold the RX SGL
- * @maxsize maximum number of bytes to be pulled from user space
- * @outlen number of bytes in the RX SGL
- * @return 0 on success, < 0 upon error
+ * @sk: socket of connection to user space
+ * @msg: user space message
+ * @flags: flags used to invoke recvmsg with
+ * @areq: instance of the cryptographic request that will hold the RX SGL
+ * @maxsize: maximum number of bytes to be pulled from user space
+ * @outlen: number of bytes in the RX SGL
+ * Return: 0 on success, < 0 upon error
  */
 int af_alg_get_rsgl(struct sock *sk, struct msghdr *msg, int flags,
 		    struct af_alg_async_req *areq, size_t maxsize,
