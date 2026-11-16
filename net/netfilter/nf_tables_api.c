@@ -1927,6 +1927,7 @@ err2:
 err_use:
 	nf_tables_unregister_hook(net, table, chain);
 err1:
+	synchronize_rcu();
 	nf_tables_chain_destroy(chain);
 
 	return err;
@@ -6266,6 +6267,7 @@ err5:
 	for (k = i - 1; k >= 0; k--)
 		nf_unregister_net_hook(net, &flowtable->ops[k]);
 
+	synchronize_rcu();
 	kfree(flowtable->ops);
 err4:
 	flowtable->data.type->free(&flowtable->data);
