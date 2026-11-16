@@ -2,7 +2,7 @@
 
 KCONFIG_FILE="drivers/Kconfig"
 KSU_VAR='source "drivers/kernelsu/Kconfig"'
-KVER="-v7"
+KVER="-v7.1"
 RVER="-v2.6"
 
 abort()
